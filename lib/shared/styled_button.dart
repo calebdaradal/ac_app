@@ -56,3 +56,34 @@ class PrimaryButton extends StatelessWidget {
   }
 }
 
+class StyledButton extends StatelessWidget {
+  const StyledButton({
+    super.key,
+    required this.onPressed,
+    required this.child,
+    this.padding,
+    this.borderRadius,
+  });
+
+  final VoidCallback? onPressed;
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final BorderRadiusGeometry? borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primaryColor, // Set your desired background color
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: borderRadius ?? BorderRadius.circular(12), // Customize border radius
+        ),
+        padding: padding ?? const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      ),
+      onPressed: onPressed,
+      child: child,
+    );
+  }
+}
+

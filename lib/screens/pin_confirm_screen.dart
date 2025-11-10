@@ -1,6 +1,7 @@
 import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/svg.dart';
 
 import '../services/pin_storage.dart';
 import 'home_screen.dart';
@@ -49,35 +50,35 @@ class _PinConfirmScreenState extends State<PinConfirmScreen> {
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-
-          Image.asset('assets/img/logo/OrangeLeaf.png'),
-
+    
+          SvgPicture.asset('assets/img/logo/OrangeLeaf.svg', width: 90,),
+    
           const SizedBox(height: 30),
-
+    
           TitleText('Confirm your PIN', fontSize: 30, color: AppColors.titleColor),
-
+    
           const SizedBox(height: 30,),
-
+    
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(4, (i) => _Dot(filled: i < _pin.length)),
           ),
-
+    
           const SizedBox(height: 8),
-
+    
           if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
           const SizedBox(height: 24),
-
+    
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: NumericKeypad(
               onTap: (v) => _tap(v, expected),
-              diameter: 72,
+              diameter: 89,
               spacing: 28,
             ),
           ),
-
-
+    
+    
           const SizedBox(height: 50,),
         ],
       ),

@@ -1,6 +1,7 @@
 import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/svg.dart';
 
 import 'pin_confirm_screen.dart';
 import '../shared/numeric_keypad.dart';
@@ -36,30 +37,30 @@ class _PinCreateScreenState extends State<PinCreateScreen> {
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Image.asset('assets/img/logo/OrangeLeaf.png'),
-
+          SvgPicture.asset('assets/img/logo/OrangeLeaf.svg', width: 90,),
+    
           const SizedBox(height: 30),
-
+    
           TitleText('Create your PIN', fontSize: 30, color: AppColors.titleColor),
-
+    
           const SizedBox(height: 30,),
-
+    
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(4, (i) => _Dot(filled: i < _pin.length)),
           ),
-
+    
           const SizedBox(height: 24),
-
+    
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: NumericKeypad(
               onTap: _tap,
-              diameter: 72, // adjust to taste
+              diameter: 89, // adjust to taste
               spacing: 28,
             ),
           ),
-
+    
           const SizedBox(height: 50,),
         ],
       ),

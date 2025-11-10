@@ -9,6 +9,8 @@ import 'screens/pin_create_screen.dart';
 import 'screens/pin_confirm_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/pin_unlock_screen.dart';
+import 'screens/vehicles/asc_screen.dart';
+import 'screens/vehicles/stk_screen.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -31,6 +33,7 @@ class MyApp extends StatelessWidget {
       title: 'AC App',
       debugShowCheckedModeBanner: false,
       theme: primaryTheme,
+      // initialRoute: WelcomeScreen.routeName,
       initialRoute: WelcomeScreen.routeName,
       // initialRoute: PinUnlockScreen.routeName,
 
@@ -42,6 +45,8 @@ class MyApp extends StatelessWidget {
         PinConfirmScreen.routeName: (_) => const PinConfirmScreen(),
         PinUnlockScreen.routeName: (_) => const PinUnlockScreen(),
         HomeScreen.routeName: (_) => const HomeScreen(),
+        AscScreen.routeName: (_) => const AscScreen(), // removed const
+        StkScreen.routeName: (_) => const StkScreen(),
       },
     );
   }

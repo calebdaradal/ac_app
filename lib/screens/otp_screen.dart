@@ -124,74 +124,76 @@ class _OtpScreenState extends State<OtpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(backgroundColor: Colors.white,),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(backgroundColor: Colors.white,),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+      
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TitleText('Verify OTP'),
+                    const SizedBox(height: 12),
+                     Row(
+                      children: [
+                        SecondaryText('Code is sent to ', fontSize: 16,),
+                         SecondaryText(_email ?? '', color: AppColors.titleColor, fontSize: 16,),
+                      ],
+                    )
+                  ],
+                )
+              ),
+      
+              
+      
+              const SizedBox(height: 24),
+      
+              StyledPinput(
+                 onChanged: (v) => _code = v,
+                 onCompleted: (_) => _verify(_email ?? ''),
+                keyboardType: TextInputType.number,
+              ),
+      
+              const SizedBox(height: 16),
+      
+              if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+      
+              const SizedBox(height: 16),
+      
+              // Resend section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  TitleText('Verify OTP'),
-                  const SizedBox(height: 12),
-                   Row(
-                    children: [
-                      SecondaryText('Code is sent to ', fontSize: 16,),
-                       SecondaryText(_email ?? '', color: AppColors.titleColor, fontSize: 16,),
-                    ],
-                  )
+                  SecondaryText('Didn\'t get the code? ' ),
+                  if (_secondsLeft > 0)
+                    PrimaryText('Resend in ${_format(_secondsLeft)}')
+                  else
+                     GestureDetector(
+                       onTap: _loading || _resendCooldown ? null : _resend,
+                       child: PrimaryText(
+                         'Resend code',
+                         color: _resendCooldown ? AppColors.secondaryTextColor : AppColors.primaryColor,
+                       ),
+                     ),
                 ],
               )
-            ),
-
-            
-
-            const SizedBox(height: 24),
-
-            StyledPinput(
-               onChanged: (v) => _code = v,
-               onCompleted: (_) => _verify(_email ?? ''),
-              keyboardType: TextInputType.number,
-            ),
-
-            const SizedBox(height: 16),
-
-            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-
-            const SizedBox(height: 16),
-
-            // Resend section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SecondaryText('Didn\'t get the code? ' ),
-                if (_secondsLeft > 0)
-                  PrimaryText('Resend in ${_format(_secondsLeft)}')
-                else
-                   GestureDetector(
-                     onTap: _loading || _resendCooldown ? null : _resend,
-                     child: PrimaryText(
-                       'Resend code',
-                       color: _resendCooldown ? AppColors.secondaryTextColor : AppColors.primaryColor,
-                     ),
-                   ),
-              ],
-            )
-            
-
-            // SizedBox(
-            //   width: double.infinity,
-            //   child: ElevatedButton(
-            //     onPressed: _loading ? null : () => _verify(email ?? ''),
-            //     child: _loading ? const CircularProgressIndicator() : const Text('Verify'),
-            //   ),
-            // ),
-          ],
+              
+      
+              // SizedBox(
+              //   width: double.infinity,
+              //   child: ElevatedButton(
+              //     onPressed: _loading ? null : () => _verify(email ?? ''),
+              //     child: _loading ? const CircularProgressIndicator() : const Text('Verify'),
+              //   ),
+              // ),
+            ],
+          ),
         ),
       ),
     );

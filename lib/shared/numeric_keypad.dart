@@ -15,7 +15,7 @@ class NumericKeypad extends StatelessWidget {
     this.spacing = 12,
     this.diameter = 64,
     this.keyColor = Colors.transparent,
-    this.textStyle = const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+    this.textStyle = const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
     this.labels,
   });
 

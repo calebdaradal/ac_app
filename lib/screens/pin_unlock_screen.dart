@@ -59,13 +59,13 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-
+    
           Image.asset('assets/img/logo/OrangeLeaf.png'),
-
+    
           const SizedBox(height: 30),
-
+    
           TitleText('Enter your PIN', fontSize: 30, color: AppColors.titleColor),
-
+    
           const SizedBox(height: 30,),
           
           Row(
@@ -79,11 +79,11 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: NumericKeypad(
               onTap: _tap,
-              diameter: 72,
+              diameter: 89,
               spacing: 16,
             ),
           ),
-
+    
           const SizedBox(height: 50,),
         ],
       ),

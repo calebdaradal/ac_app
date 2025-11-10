@@ -39,9 +39,11 @@ class SecondaryText extends StatelessWidget {
 }
 
 class PrimaryTextW extends StatelessWidget {
-  const PrimaryTextW(this.text, { this.decoration, super.key});
+  const PrimaryTextW(this.text, { this.decoration, this.fontSize, this.letterSpacing, super.key});
   final String text;
   final TextDecoration? decoration;
+  final double? fontSize;
+  final double? letterSpacing;
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +51,8 @@ class PrimaryTextW extends StatelessWidget {
       text,
       style: GoogleFonts.getTextTheme('Afacad').bodyMedium?.copyWith(
         color: Colors.white,
-        fontSize: 18,
+        fontSize: fontSize?? 18,
+        letterSpacing: letterSpacing?? 0.4,
         decoration: decoration,
         decorationColor: Colors.white
       ),
