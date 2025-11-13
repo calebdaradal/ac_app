@@ -3,6 +3,7 @@ import 'package:ac_app/theme.dart';
 import 'package:flutter/material.dart';
 
 import '../services/pin_storage.dart';
+import '../services/user_profile_service.dart';
 import 'home_screen.dart';
 import '../shared/numeric_keypad.dart';
 
@@ -38,7 +39,50 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     if (_pin.length >= 4) return;
     setState(() => _pin += value);
     if (_pin.length == 4) {
+      bool isValid = false;
+      
+      // First try local PIN (fast)
       if (_storedPin != null && _pin == _storedPin) {
+        isValid = true;
+      } else {
+        // If local PIN doesn't match or doesn't exist, check database
+        try {
+          isValid = await PinStorage.verifyPinWithDatabase(_pin);
+          if (isValid) {
+            // Cache the PIN locally for next time
+            await PinStorage.savePin(_pin);
+            if (mounted) setState(() => _storedPin = _pin);
+          }
+        } catch (e) {
+          print('Error verifying PIN with database: $e');
+        }
+      }
+      
+      if (isValid) {
+        // Always load fresh profile from database after PIN verification
+        // This ensures we get the correct user's profile (not cached from previous user)
+        final profileService = UserProfileService();
+        try {
+          // Clear any cached profile first to avoid loading wrong user's data
+          await profileService.clearProfile();
+          
+          // Load fresh profile from database for the currently authenticated user
+          await profileService.loadProfile();
+          
+          // Save UID locally for future reference
+          final uid = profileService.profile?.uid;
+          if (uid != null) {
+            await PinStorage.saveUid(uid);
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Warning: Could not load profile data: $e')),
+            );
+            return; // Don't navigate if profile load fails
+          }
+        }
+        
         if (mounted) {
           Navigator.pushReplacementNamed(context, HomeScreen.routeName);
         }

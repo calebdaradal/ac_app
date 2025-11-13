@@ -1,22 +1,95 @@
+import 'package:ac_app/services/investment_service.dart';
 import 'package:ac_app/shared/styled_card.dart';
 import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 
 import '../services/pin_storage.dart';
+import '../services/user_profile_service.dart';
+import 'admin_screen.dart';
 import 'welcome_screen.dart';
 import 'vehicles/asc_screen.dart';
 import 'vehicles/stk_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   static const routeName = '/home';
   const HomeScreen({super.key});
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  AggregatedSubscriptions? _aggregatedData;
+  VehicleSummary? _affSummary;
+  VehicleSummary? _stkSummary;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllData();
+  }
+
+  Future<void> _loadAllData() async {
+    await Future.wait([
+      _loadAggregatedData(),
+      _loadVehicleSummaries(),
+    ]);
+  }
+
+  Future<void> _loadAggregatedData() async {
+    try {
+      final data = await InvestmentService.getAllSubscriptions();
+      if (mounted) {
+        setState(() {
+          _aggregatedData = data;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        // Silently fail - just show zeros
+      }
+    }
+  }
+
+  Future<void> _loadVehicleSummaries() async {
+    try {
+      // Load both vehicle summaries in parallel
+      final results = await Future.wait([
+        InvestmentService.getVehicleSummary('AFF'),
+        InvestmentService.getVehicleSummary('STK'),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _affSummary = results[0];
+          _stkSummary = results[1];
+        });
+      }
+    } catch (e) {
+      print('[HomeScreen] Error loading vehicle summaries: $e');
+      // Silently fail - cards will show 0 values
+    }
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'No updates yet';
+    return DateFormat('MM/dd/yyyy').format(date);
+  }
+
   Future<void> _signOut(BuildContext context) async {
     await Supabase.instance.client.auth.signOut();
+    // Clear all cached data to prevent cross-user authentication issues
     await PinStorage.clearPin();
+    await PinStorage.clearUid();
+    await UserProfileService().clearProfile();
     if (context.mounted) {
       Navigator.pushNamedAndRemoveUntil(
         context,
@@ -28,21 +101,28 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final profile = UserProfileService().profile;
+    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         toolbarHeight: 90,
         automaticallyImplyLeading: false,
         backgroundColor: Colors.transparent,
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
         // leadingWidth: 72,
-        flexibleSpace: Padding(
+        flexibleSpace: SafeArea(
+          bottom: false,
+          child: Padding(
           padding: const EdgeInsets.only(left: 12, top: 12, bottom: 12, right: 16),
           child: Row(
             children: [
               InkWell(
                 borderRadius: BorderRadius.all(Radius.circular(10)),
                 highlightColor: Colors.grey.withOpacity(0.5),
-                onTap: () {},
+                onTap: () {
+                  Navigator.pushNamed(context, '/profile');
+                },
                 child: Padding(
                   padding: const EdgeInsets.only(top: 8, bottom: 8, right: 15),
                   child: Row(
@@ -54,11 +134,13 @@ class HomeScreen extends StatelessWidget {
                         margin: const EdgeInsets.all(1),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          image: DecorationImage(
-                            image: AssetImage(
-                              'assets/img/sample/man.jpg',
-                              ),
-                            // fit: BoxFit.cover,
+                            image: profile?.avatarUrl != null
+                                ? DecorationImage(
+                                    image: NetworkImage(profile!.avatarUrl!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : DecorationImage(
+                                    image: AssetImage('assets/img/sample/man.jpg'),
                           ),
                         ),
                       ),
@@ -66,8 +148,16 @@ class HomeScreen extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          TitleText('Sef Jacob', fontSize: 18, color: AppColors.titleColor),
-                          PrimaryText('sample@email.com', fontSize: 14, color: AppColors.secondaryTextColor)
+                            TitleText(
+                              profile?.fullName ?? 'User',
+                              fontSize: 18,
+                              color: AppColors.titleColor,
+                            ),
+                            PrimaryText(
+                              profile?.email ?? '',
+                              fontSize: 14,
+                              color: AppColors.secondaryTextColor,
+                            )
                         ],
                       ),
                     ],
@@ -96,15 +186,61 @@ class HomeScreen extends StatelessWidget {
     
                   // const SizedBox(width: 3,),
     
-                  InkWell(
-                    onTap: () {},
-                    borderRadius: BorderRadius.all(Radius.circular(25)),
-                    highlightColor: Colors.grey.withOpacity(0.5),
-                    child: Padding(
+                    PopupMenuButton<String>(
+                      icon: Padding(
                       padding: const EdgeInsets.all(4.0),
                       child: SvgPicture.asset(
                         'assets/img/icons/settings.svg',
                         width: 29,
+                        ),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      offset: const Offset(0, 50),
+                      onSelected: (value) {
+                        if (value == 'logout') {
+                          _signOut(context);
+                        }
+                      },
+                      itemBuilder: (BuildContext context) => [
+                        PopupMenuItem<String>(
+                          value: 'logout',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.logout,
+                                color: Colors.red.shade700,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Logout',
+                                style: TextStyle(
+                                  color: Colors.red.shade700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    // Admin button - only visible for admin users
+                    if (profile?.isAdmin == true)
+                      InkWell(
+                        onTap: () {
+                          Navigator.pushNamed(context, AdminScreen.routeName);
+                        },
+                        borderRadius: BorderRadius.all(Radius.circular(25)),
+                        highlightColor: Colors.red.withOpacity(0.2),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Icon(
+                            Icons.admin_panel_settings,
+                            size: 29,
+                            color: Colors.red.shade700,
                         ),
                     ),
                   ),
@@ -115,7 +251,15 @@ class HomeScreen extends StatelessWidget {
     
         ),
         ),
-      body: Container(
+        ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+        onRefresh: _loadAllData,
+        color: AppColors.primaryColor,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Container(
         padding: const EdgeInsets.all(20),
         child: Column(
           // mainAxisSize: MainAxisSize.min,
@@ -128,16 +272,16 @@ class HomeScreen extends StatelessWidget {
                 TitleText('Account Summary', color: Colors.grey, fontSize: 19,),
     
                 HomeCard(
-                  totalContributions:2980000.00,
-                  yield: 31.13,
-                  currentBalance: 3369221.68,
-                  totalYield: 389221.68,
+                      totalContributions: _aggregatedData?.totalContributions ?? 0.0,
+                      yield: _aggregatedData?.yieldPercentage ?? 0.0,
+                      currentBalance: _aggregatedData?.currentBalance ?? 0.0,
+                      totalYield: _aggregatedData?.totalYield ?? 0.0,
                 ),
                 
                 AFFCard(
                   title: 'Ascendo Futures Fund',
-                  yield: 23.35,
-                  date: '10/12/2025',
+                  yield: _affSummary?.latestYieldPercent ?? 0.0,
+                  date: _formatDate(_affSummary?.lastUpdated),
                   onTap: () {
                     Navigator.pushNamed(context, AscScreen.routeName);
                   },
@@ -146,8 +290,8 @@ class HomeScreen extends StatelessWidget {
     
                 AFFCard(
                   title: 'SOL/ETH Staking Pool',
-                  yield: 7.78,
-                  date: '10/12/2025',
+                  yield: _stkSummary?.latestYieldPercent ?? 0.0,
+                  date: _formatDate(_stkSummary?.lastUpdated),
                   onTap: () {
                     Navigator.pushNamed(context, StkScreen.routeName);
                   },
@@ -171,6 +315,8 @@ class HomeScreen extends StatelessWidget {
             //   child: const Text('Sign out'),
             // ),
           ],
+            ),
+          ),
         ),
       ),
     );

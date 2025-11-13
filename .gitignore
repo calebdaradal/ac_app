@@ -11,6 +11,7 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+supabase/
 
 # IntelliJ related
 *.iml
@@ -43,3 +44,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+deno.json
+BANK_MANAGEMENT_IMPLEMENTATION.md
+IMPLEMENTATION_SUMMARY.md
+INVESTMENT_FLOW_SETUP.md
+PIN_SECURITY_FLOW.md
+PROFILE_SERVICE_SUMMARY.md
+WITHDRAWAL_FLOW_IMPLEMENTATION.md
+YIELD_SYSTEM_SUMMARY.md
+QUICK_TEST_GUIDE.md

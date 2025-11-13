@@ -25,7 +25,18 @@ class _PinCreateScreenState extends State<PinCreateScreen> {
     if (_pin.length >= 4) return;
     setState(() => _pin += value);
     if (_pin.length == 4) {
-      Navigator.pushNamed(context, PinConfirmScreen.routeName, arguments: _pin);
+      // Get the isUpdating flag from route arguments
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final isUpdating = args?['isUpdating'] ?? false;
+      
+      Navigator.pushNamed(
+        context,
+        PinConfirmScreen.routeName,
+        arguments: {
+          'pin': _pin,
+          'isUpdating': isUpdating,
+        },
+      );
     }
   }
 
@@ -41,7 +52,14 @@ class _PinCreateScreenState extends State<PinCreateScreen> {
     
           const SizedBox(height: 30),
     
-          TitleText('Create your PIN', fontSize: 30, color: AppColors.titleColor),
+          TitleText(
+            ModalRoute.of(context)?.settings.arguments != null &&
+                (ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>)['isUpdating'] == true
+                ? 'Create new PIN'
+                : 'Create your PIN',
+            fontSize: 30,
+            color: AppColors.titleColor,
+          ),
     
           const SizedBox(height: 30,),
     

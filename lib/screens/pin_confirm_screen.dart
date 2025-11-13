@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 
 import '../services/pin_storage.dart';
+import '../services/user_profile_service.dart';
 import 'home_screen.dart';
 import '../shared/numeric_keypad.dart';
 
@@ -19,7 +20,7 @@ class _PinConfirmScreenState extends State<PinConfirmScreen> {
   String _pin = '';
   String? _error;
 
-  void _tap(String value, String expected) async {
+  void _tap(String value, String expected, bool isUpdating) async {
     if (value == '←') {
       if (_pin.isNotEmpty) setState(() => _pin = _pin.substring(0, _pin.length - 1));
       return;
@@ -28,9 +29,59 @@ class _PinConfirmScreenState extends State<PinConfirmScreen> {
     setState(() => _pin += value);
     if (_pin.length == 4) {
       if (_pin == expected) {
+        // Save PIN locally for quick unlock
         await PinStorage.savePin(_pin);
+        
+        // If this is a new PIN (not updating), load user profile
+        if (!isUpdating) {
+          // Load user profile from database FIRST (so we have the user ID)
+          try {
+            await UserProfileService().loadProfile();
+            print('[PinConfirm] Profile loaded successfully');
+            
+            // Save UID locally (persists across logout)
+            final uid = UserProfileService().profile?.uid;
+            if (uid != null) {
+              await PinStorage.saveUid(uid);
+            }
+          } catch (e) {
+            print('[PinConfirm] Error loading profile: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Warning: Could not load profile data')),
+              );
+            }
+          }
+        }
+        
+        // Save hashed PIN to database
+        try {
+          await PinStorage.savePinToDatabase(_pin);
+          print('[PinConfirm] PIN saved to database successfully');
+        } catch (e) {
+          print('[PinConfirm] Error saving PIN to database: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Warning: Could not save PIN to database: $e')),
+            );
+          }
+        }
+        
         if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(context, HomeScreen.routeName, (_) => false);
+          if (isUpdating) {
+            // If updating, show success message and pop back to profile
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('PIN updated successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            // Pop back to profile screen (remove verify + create + confirm screens)
+            Navigator.popUntil(context, (route) => route.settings.name == '/profile');
+          } else {
+            // If creating new PIN, go to home
+            Navigator.pushNamedAndRemoveUntil(context, HomeScreen.routeName, (_) => false);
+          }
         }
       } else {
         setState(() {
@@ -43,7 +94,10 @@ class _PinConfirmScreenState extends State<PinConfirmScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final expected = ModalRoute.of(context)!.settings.arguments as String? ?? '';
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+    final expected = args?['pin'] as String? ?? '';
+    final isUpdating = args?['isUpdating'] as bool? ?? false;
+    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(backgroundColor: Colors.white,),
@@ -72,7 +126,7 @@ class _PinConfirmScreenState extends State<PinConfirmScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: NumericKeypad(
-              onTap: (v) => _tap(v, expected),
+              onTap: (v) => _tap(v, expected, isUpdating),
               diameter: 89,
               spacing: 28,
             ),

@@ -6,7 +6,9 @@ import 'package:pinput/pinput.dart';
 import '../theme.dart';
 
 import '../services/supabase_service.dart';
+import '../services/pin_storage.dart';
 import 'pin_create_screen.dart';
+import 'pin_unlock_screen.dart';
 
 class OtpScreen extends StatefulWidget {
   static const routeName = '/otp';
@@ -34,8 +36,19 @@ class _OtpScreenState extends State<OtpScreen> {
     });
     try {
       await SupabaseService.verifyOtp(email: email, token: _code);
+      
       if (mounted) {
-        Navigator.pushReplacementNamed(context, PinCreateScreen.routeName);
+        // Check if user already has a PIN in the database
+        final hasPinInDb = await PinStorage.hasPinInDatabase();
+        print('[OTP] User has PIN in database: $hasPinInDb');
+        
+        if (hasPinInDb) {
+          // Existing user - go to unlock screen
+          Navigator.pushReplacementNamed(context, PinUnlockScreen.routeName);
+        } else {
+          // New user - create PIN
+          Navigator.pushReplacementNamed(context, PinCreateScreen.routeName);
+        }
       }
     } catch (e) {
       setState(() => _error = 'Invalid OTP');

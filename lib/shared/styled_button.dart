@@ -63,18 +63,20 @@ class StyledButton extends StatelessWidget {
     required this.child,
     this.padding,
     this.borderRadius,
+    this.backgroundColor,
   });
 
   final VoidCallback? onPressed;
   final Widget child;
   final EdgeInsetsGeometry? padding;
   final BorderRadiusGeometry? borderRadius;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primaryColor, // Set your desired background color
+        backgroundColor: backgroundColor ?? AppColors.primaryColor, // Set your desired background color
         foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: borderRadius ?? BorderRadius.circular(12), // Customize border radius

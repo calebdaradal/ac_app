@@ -1,3 +1,5 @@
+import 'package:ac_app/screens/vehicles/deposit_screen.dart';
+import 'package:ac_app/screens/vehicles/withdraw_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -11,6 +13,12 @@ import 'screens/home_screen.dart';
 import 'screens/pin_unlock_screen.dart';
 import 'screens/vehicles/asc_screen.dart';
 import 'screens/vehicles/stk_screen.dart';
+import 'screens/admin_screen.dart';
+import 'screens/admin_verification_screen.dart';
+import 'screens/create_user_screen.dart';
+import 'screens/manage_banks_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/verify_current_pin_screen.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -45,8 +53,16 @@ class MyApp extends StatelessWidget {
         PinConfirmScreen.routeName: (_) => const PinConfirmScreen(),
         PinUnlockScreen.routeName: (_) => const PinUnlockScreen(),
         HomeScreen.routeName: (_) => const HomeScreen(),
-        AscScreen.routeName: (_) => const AscScreen(), // removed const
+        AscScreen.routeName: (_) => const AscScreen(),
         StkScreen.routeName: (_) => const StkScreen(),
+        AdminScreen.routeName: (_) => const AdminScreen(),
+        AdminVerificationScreen.routeName: (_) => const AdminVerificationScreen(),
+        CreateUserScreen.routeName: (_) => const CreateUserScreen(),
+        ManageBanksScreen.routeName: (_) => const ManageBanksScreen(),
+        DepositFunds.routeName: (_) => const DepositFunds(),
+        WithdrawFunds.routeName: (_) => const WithdrawFunds(),
+        ProfileScreen.routeName: (_) => const ProfileScreen(),
+        VerifyCurrentPinScreen.routeName: (_) => const VerifyCurrentPinScreen(),
       },
     );
   }
