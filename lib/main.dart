@@ -19,6 +19,7 @@ import 'screens/create_user_screen.dart';
 import 'screens/manage_banks_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/verify_current_pin_screen.dart';
+import 'shared/styled_button.dart';
 import 'theme.dart';
 
 Future<void> main() async {

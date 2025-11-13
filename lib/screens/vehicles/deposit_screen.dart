@@ -122,6 +122,13 @@ class _DepositFundsState extends State<DepositFunds> {
 
     try {
       final amount = double.parse(_amountController.text.trim());
+      if (amount <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Amount must be greater than zero')),
+        );
+        setState(() => _isSubmitting = false);
+        return;
+      }
       final refNumber = int.parse(_refNumberController.text.trim());
 
       await TransactionService.createTransaction(
@@ -368,6 +375,9 @@ class _DepositFundsState extends State<DepositFunds> {
                                 child: TextField(
                                   controller: _amountController,
                                   keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                                  ],
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: AppColors.titleColor,
