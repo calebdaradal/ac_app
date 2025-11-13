@@ -21,7 +21,7 @@ class HomeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final NumberFormat currencyFormatter = NumberFormat.decimalPattern();
+    final NumberFormat currencyFormatter = NumberFormat('#,##0.00');
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
       color: Color.fromRGBO(252, 252, 252, 1),
