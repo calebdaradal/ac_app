@@ -229,6 +229,7 @@ class _AscScreenState extends State<AscScreen> {
       backgroundColor: Colors.white,
       
       appBar: AppBar(
+        surfaceTintColor: Colors.transparent,
         backgroundColor: AppColors.primaryColor,
         foregroundColor: Colors.white,
         systemOverlayStyle: SystemUiOverlayStyle(

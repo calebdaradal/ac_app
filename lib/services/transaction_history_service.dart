@@ -40,11 +40,27 @@ class TransactionHistoryService {
         if (transactionTypeId == 2) {
           // Deposit
           type = 'Deposit';
-          displayStatus = status == 'PENDING' ? 'Verifying' : 'Verified';
+          if (status == 'PENDING') {
+            displayStatus = 'Verifying';
+          } else if (status == 'DENIED') {
+            displayStatus = 'Denied';
+          } else if (status == 'VERIFIED') {
+            displayStatus = 'Verified';
+          } else {
+            displayStatus = status; // Show actual status for any other cases
+          }
         } else {
           // Withdrawal
           type = 'Withdrawal';
-          displayStatus = status == 'PENDING' ? 'Verifying' : status == 'ISSUED' ? 'Completed' : status;
+          if (status == 'PENDING') {
+            displayStatus = 'Verifying';
+          } else if (status == 'ISSUED') {
+            displayStatus = 'Completed';
+          } else if (status == 'DENIED') {
+            displayStatus = 'Denied';
+          } else {
+            displayStatus = status; // Show actual status for any other cases
+          }
         }
 
         allTransactions.add(TransactionHistoryItem(

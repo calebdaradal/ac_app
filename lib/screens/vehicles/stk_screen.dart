@@ -200,6 +200,7 @@ class _StkScreenState extends State<StkScreen> {
       backgroundColor: Colors.white,
       
       appBar: AppBar(
+        surfaceTintColor: Colors.transparent,
         backgroundColor: AppColors.tertiaryColor,
         foregroundColor: Colors.white,
         systemOverlayStyle: SystemUiOverlayStyle(
