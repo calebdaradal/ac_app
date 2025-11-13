@@ -184,7 +184,7 @@ class YieldService {
         yieldType: item['yield_type'] as String,
         totalAum: (item['total_aum'] as num).toDouble(),
         appliedDate: DateTime.parse(item['applied_date'] as String),
-        createdAt: DateTime.parse(item['created_at'] as String),
+        createdAt: DateTime.parse(item['created_at'] as String).toUtc(),
       );
     }).toList();
   }

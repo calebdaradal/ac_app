@@ -88,7 +88,7 @@ class TransactionHistoryService {
         final netYield = (yieldDist['net_yield'] as num).toDouble();
         final grossYield = (yieldDist['gross_yield'] as num).toDouble();
         final balanceBefore = (yieldDist['balance_before'] as num).toDouble();
-        final createdAt = DateTime.parse(yieldDist['created_at'] as String);
+        final createdAt = DateTime.parse(yieldDist['created_at'] as String).toUtc();
         
         // Calculate yield percentage: (gross_yield / balance_before) * 100
         double yieldPercent = 0.0;
