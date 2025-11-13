@@ -1,6 +1,7 @@
 import 'package:ac_app/screens/vehicles/deposit_screen.dart';
 import 'package:ac_app/screens/vehicles/withdraw_screen.dart';
 import 'package:ac_app/services/investment_service.dart';
+import 'package:ac_app/services/transaction_history_service.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_card.dart';
 import 'package:ac_app/shared/styled_text.dart';
@@ -23,6 +24,9 @@ class StkScreen extends StatefulWidget {
 class _StkScreenState extends State<StkScreen> {
   UserVehicleSubscription? _subscription;
   bool _loading = true;
+  List<TransactionHistoryItem> _recentTransactions = [];
+  List<TransactionHistoryItem> _allTransactions = [];
+  bool _loadingTransactions = false;
 
   @override
   void initState() {
@@ -38,6 +42,10 @@ class _StkScreenState extends State<StkScreen> {
           _subscription = subscription;
           _loading = false;
         });
+        // Load transactions after subscription is loaded
+        if (subscription != null) {
+          _loadTransactionHistory();
+        }
       }
     } catch (e) {
       // If vehicle not found, still allow navigation but show error
@@ -46,6 +54,31 @@ class _StkScreenState extends State<StkScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Vehicle not found. Please contact support.')),
         );
+      }
+    }
+  }
+
+  Future<void> _loadTransactionHistory() async {
+    if (_subscription?.vehicleId == null) return;
+
+    setState(() => _loadingTransactions = true);
+    
+    try {
+      final transactions = await TransactionHistoryService.getVehicleTransactionHistory(
+        _subscription!.vehicleId,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _allTransactions = transactions;
+          _recentTransactions = transactions.take(3).toList(); // Show last 3
+          _loadingTransactions = false;
+        });
+      }
+    } catch (e) {
+      print('[StkScreen] Error loading transactions: $e');
+      if (mounted) {
+        setState(() => _loadingTransactions = false);
       }
     }
   }
@@ -67,6 +100,7 @@ class _StkScreenState extends State<StkScreen> {
     // Refresh data if deposit was made
     if (result == true) {
       _loadSubscriptionData();
+      _loadTransactionHistory();
     }
   }
 
@@ -87,45 +121,9 @@ class _StkScreenState extends State<StkScreen> {
     // Refresh data if withdrawal was made
     if (result == true) {
       _loadSubscriptionData();
+      _loadTransactionHistory();
     }
   }
-  void _showFullScreenDialog() {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close',
-      barrierColor: Colors.black54,
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, _, __) {
-        return Material(
-          color: Colors.white,
-          child: SafeArea(
-            child: Column(
-              children: [
-                AppBar(
-                  // automaticallyImplyLeading: false,
-                  backgroundColor: Colors.transparent,
-                  title: const Text('All Transactions'),
-                  
-                ),
-                const Expanded(
-                  child: Center(child: Text('No transactions yet')),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, anim, _, child) {
-        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(curved),
-          child: child,
-        );
-      },
-    );
-  }
-
   void _showTransactionsSheet() {
     showModalBottomSheet(
       context: context,
@@ -153,16 +151,37 @@ class _StkScreenState extends State<StkScreen> {
                     const Text('All Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 12),
                     Expanded(
-                      child: ListView.builder(
-                        controller: scrollController,
-                        itemCount: 20,
-                        itemBuilder: (_, i) => TransactionCard(
-                            date: '10/10/2023',
-                            amount: 1000.0 + i,
-                            info: 100.0,
-                            status: 'Yield',
-                          ),
-                      ),
+                      child: _allTransactions.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey.shade400),
+                                  const SizedBox(height: 16),
+                                  PrimaryText(
+                                    'No transactions yet',
+                                    fontSize: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: _allTransactions.length,
+                              itemBuilder: (_, i) {
+                                final trans = _allTransactions[i];
+                                return TransactionCard(
+                                  date: trans.displayDate,
+                                  amount: trans.amount,
+                                  info: trans.yieldPercent,
+                                  status: trans.status,
+                                  type: trans.type,
+                                  isPositive: trans.isPositive,
+                                );
+                              },
+                            ),
                     ),
                     const SizedBox(height: 50),
                   ],
@@ -303,35 +322,50 @@ class _StkScreenState extends State<StkScreen> {
                       ),
                     ],
                   ),
-                  // const SizedBox(height: 12),
-                  // Add your list/items here
-                  SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: Column(
-                      children: [
-                        TransactionCard(
-                          date: '10/10/2023',
-                          amount: 1000.78,
-                          info: 100.0,
-                          status: 'Yield',
+                  const SizedBox(height: 12),
+                  
+                  // Transaction history
+                  if (_loadingTransactions)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_recentTransactions.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade400),
+                            const SizedBox(height: 12),
+                            PrimaryText(
+                              'No transactions yet',
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                          ],
                         ),
-                        TransactionCard(
-                          date: '10/10/2023',
-                          amount: 1000.0,
-                          info: 100.0,
-                          status: 'Yield',
-                        ),
-                        TransactionCard(
-                          date: '10/10/2023',
-                          amount: 1000.0,
-                          info: 100.0,
-                          status: 'Yield',
-                        ),
-                        
-                      ],
+                      ),
+                    )
+                  else
+                    Column(
+                      children: _recentTransactions.map((trans) {
+                        return TransactionCard(
+                          date: trans.displayDate,
+                          amount: trans.amount,
+                          info: trans.yieldPercent,
+                          status: trans.status,
+                          type: trans.type,
+                          isPositive: trans.isPositive,
+                        );
+                      }).toList(),
                     ),
-                  ),
     
                   
                 ],

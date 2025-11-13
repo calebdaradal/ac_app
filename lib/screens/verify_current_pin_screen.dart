@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_svg/svg.dart';
 import '../theme.dart';
 import '../services/pin_storage.dart';
 import '../shared/numeric_keypad.dart';
+import '../shared/styled_text.dart';
 import 'pin_create_screen.dart';
 
 class VerifyCurrentPinScreen extends StatefulWidget {
@@ -84,7 +85,7 @@ class _VerifyCurrentPinScreenState extends State<VerifyCurrentPinScreen> {
       } else {
         print('[VerifyCurrentPin] PIN verification failed');
         setState(() {
-          _errorMessage = 'Incorrect PIN. Please try again.';
+          _errorMessage = 'Incorrect PIN';
           _pin = '';
           _isVerifying = false;
         });
@@ -92,7 +93,7 @@ class _VerifyCurrentPinScreenState extends State<VerifyCurrentPinScreen> {
     } catch (e) {
       print('[VerifyCurrentPin] Error during verification: $e');
       setState(() {
-        _errorMessage = 'Error verifying PIN. Please try again.';
+        _errorMessage = 'Error verifying PIN';
         _pin = '';
         _isVerifying = false;
       });
@@ -103,105 +104,71 @@ class _VerifyCurrentPinScreenState extends State<VerifyCurrentPinScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppColors.titleColor),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            children: [
-              const SizedBox(height: 40),
-              
-              // Logo
-              SvgPicture.asset(
-                'assets/img/logo/OrangeLeaf.svg',
-                width: 90,
-              ),
-              
-              const SizedBox(height: 40),
-              
-              // Title
-              const Text(
-                'Verify Current PIN',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2D3748),
-                ),
-              ),
-              
-              const SizedBox(height: 8),
-              
-              const Text(
-                'Enter your current PIN to continue',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF718096),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              
-              const SizedBox(height: 40),
-              
-              // PIN Dots
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  4,
-                  (index) => Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: index < _pin.length
-                          ? AppColors.primaryColor
-                          : Colors.grey.shade300,
-                    ),
-                  ),
-                ),
-              ),
-              
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _errorMessage!,
-                  style: const TextStyle(
-                    color: Colors.red,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              
-              const Spacer(),
-              
-              // Numeric Keypad
-              if (_isVerifying)
-                const CircularProgressIndicator()
-              else
-                NumericKeypad(
-                  onTap: (value) {
-                    if (value == '←') {
-                      _onBackspace();
-                    } else {
-                      _onDigitEntered(value);
-                    }
-                  },
-                  diameter: 89,
-                  spacing: 28,
-                ),
-              
-              const SizedBox(height: 40),
-            ],
+      appBar: AppBar(backgroundColor: Colors.white,),
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SvgPicture.asset('assets/img/logo/OrangeLeaf.svg', width: 90,),
+    
+          const SizedBox(height: 30),
+    
+          TitleText(
+            'Verify Current PIN',
+            fontSize: 30,
+            color: AppColors.titleColor,
           ),
-        ),
+    
+          const SizedBox(height: 30,),
+    
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(4, (i) => _Dot(filled: i < _pin.length)),
+          ),
+    
+          const SizedBox(height: 8),
+    
+          if (_errorMessage != null) Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 24),
+    
+          // Numeric Keypad
+          if (_isVerifying)
+            const CircularProgressIndicator()
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: NumericKeypad(
+                onTap: (value) {
+                  if (value == '←') {
+                    _onBackspace();
+                  } else {
+                    _onDigitEntered(value);
+                  }
+                },
+                diameter: 89,
+                spacing: 28,
+              ),
+            ),
+    
+          const SizedBox(height: 50,),
+        ],
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  final bool filled;
+  const _Dot({required this.filled});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: filled ?BoxBorder.all(color: Color.fromRGBO(44, 100, 227, 1), width: 1) : BoxBorder.all(color: const Color.fromARGB(255, 185, 185, 185), width: 1,),
+        color: filled ? const Color.fromRGBO(44, 100, 227, 1) : const Color.fromARGB(255, 255, 255, 255),
       ),
     );
   }
