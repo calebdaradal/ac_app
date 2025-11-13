@@ -36,6 +36,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadAllData() async {
+    // Ensure profile is loaded before fetching data
+    try {
+      final profileService = UserProfileService();
+      if (profileService.profile == null) {
+        await profileService.loadProfile();
+      }
+    } catch (e) {
+      print('[HomeScreen] Error loading profile: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+      return;
+    }
+
     await Future.wait([
       _loadAggregatedData(),
       _loadVehicleSummaries(),

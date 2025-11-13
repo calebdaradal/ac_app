@@ -71,8 +71,38 @@ class _AdminScreenState extends State<AdminScreen> {
     return DateFormat('MMM dd, yyyy • hh:mm a').format(date);
   }
 
+  Future<DateTime?> _selectAppliedDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      helpText: 'Select Applied Date',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppColors.titleColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    return picked;
+  }
+
   Future<void> _approveTransaction(UserTransaction transaction) async {
     final isWithdrawal = transaction.transactionId == TransactionType.withdrawal;
+
+    // Show date picker for admin to set applied date
+    final appliedDate = await _selectAppliedDate();
+    if (appliedDate == null) {
+      // User cancelled date picker
+      return;
+    }
 
     setState(() => _processingIds.add(transaction.id));
 
@@ -92,27 +122,32 @@ class _AdminScreenState extends State<AdminScreen> {
         }
 
         final currentBalance = (userVehicle['current_balance'] as num).toDouble();
-        final totalContrib = (userVehicle['total_contrib'] as num).toDouble();
         
         if (currentBalance < transaction.amount!) {
           throw Exception('Insufficient balance');
         }
 
-        // Deduct from both current_balance AND total_contrib
+        // Deduct ONLY from current_balance
         final newBalance = currentBalance - transaction.amount!;
-        final newTotalContrib = totalContrib - transaction.amount!;
         
+        // Set total_contrib to equal new balance
+        // Keep total_yield and total_yield_percent unchanged (only updated when admin applies yield)
         await supabase
             .from('userinvestmentvehicle')
             .update({
               'current_balance': newBalance,
-              'total_contrib': newTotalContrib,
+              'total_contrib': newBalance, // Inherit from current_balance
+              // total_yield and total_yield_percent remain unchanged
             })
             .eq('id', userVehicle['id']);
 
         await TransactionService.updateTransactionStatus(
           transactionId: transaction.id,
           status: TransactionStatus.issued,
+        );
+        await TransactionService.updateTransactionAppliedDate(
+          transactionId: transaction.id,
+          appliedDate: appliedDate,
         );
       } else {
         // Process deposit
@@ -125,6 +160,10 @@ class _AdminScreenState extends State<AdminScreen> {
         await TransactionService.updateTransactionStatus(
           transactionId: transaction.id,
           status: TransactionStatus.verified,
+        );
+        await TransactionService.updateTransactionAppliedDate(
+          transactionId: transaction.id,
+          appliedDate: appliedDate,
         );
       }
 
@@ -261,7 +300,7 @@ class _AdminScreenState extends State<AdminScreen> {
                             ),
                             const SizedBox(height: 4),
                             SecondaryText(
-                              _formatDate(transaction.dateIssued),
+                              _formatDate(transaction.appliedAt),
                               fontSize: 12,
                               color: Colors.grey,
                             ),
@@ -658,9 +697,17 @@ class _AdminScreenState extends State<AdminScreen> {
                     }
 
                     final yieldValue = double.tryParse(yieldController.text.trim());
-                    if (yieldValue == null || yieldValue <= 0) {
+                    if (yieldValue == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a valid positive number')),
+                        const SnackBar(content: Text('Please enter a valid number')),
+                      );
+                      return;
+                    }
+                    
+                    // For percentage type, validate range
+                    if (selectedYieldType == 'Percentage' && (yieldValue < -100 || yieldValue > 100)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Percentage must be between -100% and 100%')),
                       );
                       return;
                     }
@@ -680,8 +727,11 @@ class _AdminScreenState extends State<AdminScreen> {
                             ),
                             const SizedBox(height: 8),
                             SecondaryText(
-                              'Yield: ${selectedYieldType == 'Amount' ? '₱${_formatCurrency(yieldValue)}' : '$yieldValue%'}',
+                              'Yield: ${selectedYieldType == 'Amount' 
+                                ? '${yieldValue >= 0 ? '₱' : '-₱'}${_formatCurrency(yieldValue.abs())}' 
+                                : '${yieldValue >= 0 ? '+' : ''}$yieldValue%'}',
                               fontSize: 14,
+                              color: yieldValue >= 0 ? null : Colors.red,
                             ),
                             const SizedBox(height: 8),
                             SecondaryText(
@@ -689,10 +739,12 @@ class _AdminScreenState extends State<AdminScreen> {
                               fontSize: 14,
                             ),
                             const SizedBox(height: 16),
-                            const SecondaryText(
-                              'This will update all user balances subscribed to this vehicle.',
+                            SecondaryText(
+                              yieldValue < 0 
+                                ? '⚠️ This is a NEGATIVE yield update. User balances will DECREASE.'
+                                : 'This will update all user balances subscribed to this vehicle.',
                               fontSize: 13,
-                              color: Colors.orange,
+                              color: yieldValue < 0 ? Colors.red : Colors.orange,
                             ),
                           ],
                         ),

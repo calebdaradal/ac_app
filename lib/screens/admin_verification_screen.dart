@@ -61,6 +61,29 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
     return formatter.format(amount);
   }
 
+  Future<DateTime?> _selectAppliedDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      helpText: 'Select Applied Date',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppColors.titleColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    return picked;
+  }
+
   Future<void> _verifyTransaction(int transactionId) async {
     // Find the transaction
     final transaction = _pendingTransactions.firstWhere(
@@ -91,6 +114,13 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
       return;
     }
 
+    // Show date picker for admin to set applied date
+    final appliedDate = await _selectAppliedDate();
+    if (appliedDate == null) {
+      // User cancelled date picker
+      return;
+    }
+
     setState(() => _verifyingIds.add(transactionId));
 
     try {
@@ -102,10 +132,14 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
           userUid: transaction.userUid,
         );
 
-        // Update transaction status to VERIFIED
+        // Update transaction status to VERIFIED and applied_at date
         await TransactionService.updateTransactionStatus(
           transactionId: transactionId,
           status: TransactionStatus.verified,
+        );
+        await TransactionService.updateTransactionAppliedDate(
+          transactionId: transactionId,
+          appliedDate: appliedDate,
         );
       } else if (isWithdrawal) {
         // Process withdrawal: deduct from both current_balance and total_contrib
@@ -124,7 +158,6 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
         }
 
         final currentBalance = (userVehicle['current_balance'] as num).toDouble();
-        final totalContrib = (userVehicle['total_contrib'] as num).toDouble();
         
         // Validate sufficient balance
         if (currentBalance < transaction.amount!) {
@@ -133,22 +166,28 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
           );
         }
 
-        // Deduct from both current_balance AND total_contrib
+        // Deduct ONLY from current_balance
         final newBalance = currentBalance - transaction.amount!;
-        final newTotalContrib = totalContrib - transaction.amount!;
         
+        // Set total_contrib to equal new balance
+        // Keep total_yield and total_yield_percent unchanged (only updated when admin applies yield)
         await supabase
             .from('userinvestmentvehicle')
             .update({
               'current_balance': newBalance,
-              'total_contrib': newTotalContrib,
+              'total_contrib': newBalance, // Inherit from current_balance
+              // total_yield and total_yield_percent remain unchanged
             })
             .eq('id', userVehicle['id']);
 
-        // Update transaction status to ISSUED
+        // Update transaction status to ISSUED and applied_at date
         await TransactionService.updateTransactionStatus(
           transactionId: transactionId,
           status: TransactionStatus.issued,
+        );
+        await TransactionService.updateTransactionAppliedDate(
+          transactionId: transactionId,
+          appliedDate: appliedDate,
         );
       }
 
@@ -304,7 +343,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
                                       ),
                                       const SizedBox(height: 4),
                                       SecondaryText(
-                                        _formatDate(transaction.dateIssued),
+                                        _formatDate(transaction.appliedAt),
                                         fontSize: 12,
                                         color: Colors.grey,
                                       ),

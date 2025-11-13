@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'user_profile_service.dart';
+import 'package:ac_app/constants/transaction_constants.dart';
 
 class YieldService {
   static final SupabaseClient _supabase = Supabase.instance.client;
@@ -40,29 +41,80 @@ class YieldService {
     print('[YieldService] Yield Type: $yieldType');
     print('[YieldService] Applied Date: $appliedDate');
 
-    // 1. Fetch all users subscribed to this vehicle with current_balance > 0
+    // Format applied_date for comparison (date only, no time)
+    final appliedDateStr = appliedDate.toIso8601String().split('T')[0];
+
+    // 1. Fetch all users subscribed to this vehicle
     final subscriptions = await _supabase
         .from('userinvestmentvehicle')
         .select('id, user_uid, current_balance, total_yield, total_yield_percent')
-        .eq('vehicle_id', vehicleId)
-        .gt('current_balance', 0);
+        .eq('vehicle_id', vehicleId);
 
     if (subscriptions.isEmpty) {
-      throw Exception('No active subscriptions found for this vehicle');
+      throw Exception('No subscriptions found for this vehicle');
     }
 
-    print('[YieldService] Found ${subscriptions.length} active subscriptions');
+    print('[YieldService] Found ${subscriptions.length} subscriptions');
 
-    // 2. Calculate total AUM (sum of all balances)
+    // 2. Calculate eligible balance for each user based on deposits/withdrawals before yield date
+    Map<String, double> eligibleBalances = {};
     double totalAum = 0;
+
     for (var sub in subscriptions) {
-      totalAum += (sub['current_balance'] as num).toDouble();
+      final userUid = sub['user_uid'] as String;
+      
+      // Get all VERIFIED deposits for this user and vehicle up to yield date
+      final deposits = await _supabase
+          .from('usertransactions')
+          .select('amount, applied_at')
+          .eq('user_uid', userUid)
+          .eq('vehicle_id', vehicleId)
+          .eq('transaction_id', TransactionType.deposit)
+          .eq('status', TransactionStatus.verified)
+          .lte('applied_at', appliedDateStr);
+
+      // Get all ISSUED withdrawals for this user and vehicle up to yield date
+      final withdrawals = await _supabase
+          .from('usertransactions')
+          .select('amount, applied_at')
+          .eq('user_uid', userUid)
+          .eq('vehicle_id', vehicleId)
+          .eq('transaction_id', TransactionType.withdrawal)
+          .eq('status', TransactionStatus.issued)
+          .lte('applied_at', appliedDateStr);
+
+      // Calculate eligible balance: sum of deposits - sum of withdrawals (before yield date)
+      double eligibleBalance = 0.0;
+      
+      // Sum verified deposits (apply 2% fee like in createDeposit)
+      for (var deposit in deposits) {
+        final amount = (deposit['amount'] as num).toDouble();
+        const feePercentage = 0.02;
+        final amountAfterFee = amount * (1 - feePercentage);
+        eligibleBalance += amountAfterFee;
+      }
+      
+      // Subtract issued withdrawals
+      for (var withdrawal in withdrawals) {
+        final amount = (withdrawal['amount'] as num).toDouble();
+        eligibleBalance -= amount;
+      }
+
+      // Only include users with positive eligible balance
+      if (eligibleBalance > 0) {
+        eligibleBalances[userUid] = eligibleBalance;
+        totalAum += eligibleBalance;
+        
+        print('[YieldService] User $userUid: Eligible Balance = ₱${eligibleBalance.toStringAsFixed(2)} (${deposits.length} deposits, ${withdrawals.length} withdrawals)');
+      } else {
+        print('[YieldService] User $userUid: Eligible Balance = ₱0.00 (skipped)');
+      }
     }
 
-    print('[YieldService] Total AUM: ₱${totalAum.toStringAsFixed(2)}');
+    print('[YieldService] Total Eligible AUM: ₱${totalAum.toStringAsFixed(2)}');
 
     if (totalAum == 0) {
-      throw Exception('Total AUM is zero');
+      throw Exception('Total eligible AUM is zero - no deposits eligible for this yield date');
     }
 
     // 3. Create yield record
@@ -74,7 +126,7 @@ class YieldService {
           'yield_type': yieldType,
           'performance_fee_rate': performanceFeeRate,
           'total_aum': totalAum,
-          'applied_date': appliedDate.toIso8601String().split('T')[0],
+          'applied_date': appliedDateStr,
           'created_by': adminUid,
         })
         .select('id')
@@ -83,48 +135,78 @@ class YieldService {
     final yieldId = yieldRecord['id'] as int;
     print('[YieldService] Created yield record with ID: $yieldId');
 
-    // 4. Calculate and apply yield to each user
+    // 4. Calculate and apply yield to each user with eligible balance
     List<Map<String, dynamic>> distributions = [];
     int usersProcessed = 0;
 
     for (var sub in subscriptions) {
       final subId = sub['id'] as int;
       final userUid = sub['user_uid'] as String;
-      final balanceBefore = (sub['current_balance'] as num).toDouble();
+      
+      // Skip users without eligible balance
+      if (!eligibleBalances.containsKey(userUid)) {
+        continue;
+      }
+      
+      final eligibleBalance = eligibleBalances[userUid]!;
       final currentTotalYield = (sub['total_yield'] as num?)?.toDouble() ?? 0.0;
-      final currentTotalYieldPercent = (sub['total_yield_percent'] as num?)?.toDouble() ?? 0.0;
 
       // Calculate yield based on type
       double grossYield;
-      double yieldPercent;
 
       if (yieldType == 'Amount') {
         // Formula: Y_gross_i = (B_i / ΣB) * Y_total
-        grossYield = (balanceBefore / totalAum) * yieldValue;
-        yieldPercent = (grossYield / balanceBefore) * 100;
+        // Use eligible balance instead of current balance
+        grossYield = (eligibleBalance / totalAum) * yieldValue;
       } else {
         // yieldType == 'Percentage'
         // Formula: Y_gross_i = B_i * r
+        // Use eligible balance instead of current balance
         final rate = yieldValue / 100; // Convert percentage to decimal
-        grossYield = balanceBefore * rate;
-        yieldPercent = yieldValue;
+        grossYield = eligibleBalance * rate;
       }
 
       // Calculate performance fee: Y_perf_i = Y_gross_i * pf
+      // For negative yields, performance fee is also negative (reduces the loss)
+      // For positive yields, performance fee is positive (reduces the gain)
       final performanceFee = grossYield * performanceFeeRate;
 
       // Calculate net yield: Y_net_i = Y_gross_i - Y_perf_i
+      // For negative yields: netYield = grossYield - (negative fee) = grossYield + abs(fee) (less negative)
+      // For positive yields: netYield = grossYield - (positive fee) = grossYield - fee (less positive)
       final netYield = grossYield - performanceFee;
 
-      // Calculate new balance: NewBalance_i = B_i + Y_net_i
-      final balanceAfter = balanceBefore + netYield;
+      // Get current balance and total contrib to calculate yield percent
+      final currentBalance = (sub['current_balance'] as num).toDouble();
+      final totalContrib = (sub['total_contrib'] as num?)?.toDouble() ?? 0.0;
+      
+      // Calculate new balance: Current Balance + Net Yield
+      // Note: We add yield to current balance, not eligible balance
+      // because eligible balance is just for calculation purposes
+      final balanceAfter = currentBalance + netYield;
+      
+      // Calculate yield percent using formula: ((current_balance - total_contrib) / total_contrib) * 100
+      // After yield is applied: new_balance = current_balance + net_yield
+      // So yield_percent = ((new_balance - total_contrib) / total_contrib) * 100
+      double yieldPercent;
+      if (totalContrib > 0) {
+        yieldPercent = ((balanceAfter - totalContrib) / totalContrib) * 100;
+      } else {
+        yieldPercent = 0.0;
+      }
 
       // Update totals
+      // Accumulate total yield amount (sum of all yields earned)
       final newTotalYield = currentTotalYield + netYield;
-      final newTotalYieldPercent = currentTotalYieldPercent + yieldPercent;
+      
+      // Calculate and store yield percent using formula: ((current_balance - total_contrib) / total_contrib) * 100
+      // This represents the current yield percentage after this yield is applied
+      // Use balanceAfter (which includes the new yield) and totalContrib
+      final newTotalYieldPercent = yieldPercent;
 
       print('[YieldService] User: $userUid');
-      print('  Balance Before: ₱${balanceBefore.toStringAsFixed(2)}');
+      print('  Eligible Balance (for yield calc): ₱${eligibleBalance.toStringAsFixed(2)}');
+      print('  Current Balance (before yield): ₱${currentBalance.toStringAsFixed(2)}');
       print('  Gross Yield: ₱${grossYield.toStringAsFixed(2)}');
       print('  Performance Fee: ₱${performanceFee.toStringAsFixed(2)}');
       print('  Net Yield: ₱${netYield.toStringAsFixed(2)}');
@@ -135,7 +217,7 @@ class YieldService {
         'yield_id': yieldId,
         'user_uid': userUid,
         'vehicle_id': vehicleId,
-        'balance_before': balanceBefore,
+        'balance_before': eligibleBalance, // Store eligible balance used for calculation
         'gross_yield': grossYield,
         'performance_fee': performanceFee,
         'net_yield': netYield,
@@ -173,7 +255,7 @@ class YieldService {
   static Future<List<YieldRecord>> getYieldHistory(int vehicleId) async {
     final response = await _supabase
         .from('yields')
-        .select('id, yield_amount, yield_type, total_aum, applied_date, created_at')
+        .select('id, yield_amount, yield_type, total_aum, applied_date')
         .eq('vehicle_id', vehicleId)
         .order('applied_date', ascending: false);
 
@@ -184,7 +266,6 @@ class YieldService {
         yieldType: item['yield_type'] as String,
         totalAum: (item['total_aum'] as num).toDouble(),
         appliedDate: DateTime.parse(item['applied_date'] as String),
-        createdAt: DateTime.parse(item['created_at'] as String).toUtc(),
       );
     }).toList();
   }
@@ -229,7 +310,6 @@ class YieldRecord {
   final String yieldType;
   final double totalAum;
   final DateTime appliedDate;
-  final DateTime createdAt;
 
   YieldRecord({
     required this.id,
@@ -237,7 +317,6 @@ class YieldRecord {
     required this.yieldType,
     required this.totalAum,
     required this.appliedDate,
-    required this.createdAt,
   });
 }
 

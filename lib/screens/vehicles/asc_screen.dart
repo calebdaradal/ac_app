@@ -285,7 +285,7 @@ class _AscScreenState extends State<AscScreen> {
                       currentBalance: _subscription?.currentBalance ?? 0.0,
                       yield: _subscription?.yieldPercentage ?? 0.0,
                       totalContributions: _subscription?.totalContributions ?? 0.0,
-                      totalYield: _subscription?.totalYield ?? 0.0,
+                      totalYield: _subscription?.calculatedYield ?? 0.0,
                     ),
                     Positioned(
                       bottom: -30,

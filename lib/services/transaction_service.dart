@@ -44,6 +44,7 @@ class TransactionService {
 
     print('[TransactionService] Creating transaction: type=$transactionTypeId, amount=$amount, status=$status, vehicleId=$vehicleId, refNumber=$refNumber');
 
+    // Set default applied_at to today's date (admin will update this when approving)
     final data = {
       'user_uid': uid,
       'transaction_id': transactionTypeId,
@@ -51,7 +52,7 @@ class TransactionService {
       'bank_detail': bankDetailId,
       'status': status,
       'vehicle_id': vehicleId, // Store vehicle_id in transaction
-      'date_issued': DateTime.now().toIso8601String(),
+      'applied_at': DateTime.now().toIso8601String().split('T')[0], // Default to today's date
     };
 
     // Add ref_number if provided (for deposits)
@@ -93,6 +94,26 @@ class TransactionService {
     }
   }
 
+  /// Update transaction applied_at date (for admin when approving)
+  static Future<void> updateTransactionAppliedDate({
+    required int transactionId,
+    required DateTime appliedDate,
+  }) async {
+    print('[TransactionService] Updating transaction $transactionId applied_at to: $appliedDate');
+
+    final response = await _supabase
+        .from('usertransactions')
+        .update({
+          'applied_at': appliedDate.toIso8601String().split('T')[0],
+        })
+        .eq('id', transactionId)
+        .select('id, applied_at')
+        .single();
+
+    print('[TransactionService] Transaction applied_at updated successfully');
+    print('[TransactionService] Updated transaction: $response');
+  }
+
   /// Get all pending transactions (for admin)
   static Future<List<UserTransaction>> getPendingTransactions() async {
     print('[TransactionService] Fetching pending transactions');
@@ -108,13 +129,13 @@ class TransactionService {
           amount,
           bank_detail,
           vehicle_id,
-          date_issued,
+          applied_at,
           ref_number,
           transactions:transaction_id(type),
           bankdetails:bank_detail(id, bank_name, account_name, acaccount_number, location, short_code)
         ''')
         .eq('status', TransactionStatus.pending)
-        .order('date_issued', ascending: false);
+        .order('applied_at', ascending: false);
 
     print('[TransactionService] Found ${response.length} pending transactions');
     
@@ -212,12 +233,12 @@ class TransactionService {
           status,
           amount,
           bank_detail,
-          date_issued,
+          applied_at,
           transactions:transaction_id(type),
           bankdetails:bank_detail(id, bank_name, account_name)
         ''')
         .eq('user_uid', uid)
-        .order('date_issued', ascending: false);
+        .order('applied_at', ascending: false);
 
     return (response as List).map((item) => UserTransaction.fromJson(item)).toList();
   }
@@ -232,7 +253,7 @@ class UserTransaction {
   final double? amount;
   final int? bankDetailId;
   final int? vehicleId; // Store vehicle_id for processing on verification
-  final DateTime dateIssued;
+  final DateTime appliedAt;
   final int? refNumber; // Reference number for deposits
   final String? transactionType;
   final String? bankName;
@@ -251,7 +272,7 @@ class UserTransaction {
     this.amount,
     this.bankDetailId,
     this.vehicleId,
-    required this.dateIssued,
+    required this.appliedAt,
     this.refNumber,
     this.transactionType,
     this.bankName,
@@ -331,7 +352,7 @@ class UserTransaction {
       amount: (json['amount'] as num?)?.toDouble(),
       bankDetailId: json['bank_detail'] as int?,
       vehicleId: json['vehicle_id'] as int?,
-      dateIssued: DateTime.parse(json['date_issued'] as String),
+      appliedAt: DateTime.parse(json['applied_at'] as String),
       refNumber: json['ref_number'] as int?,
       transactionType: transactionType,
       bankName: bankName,

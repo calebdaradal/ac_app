@@ -77,24 +77,47 @@ class InvestmentService {
     double totalContrib = 0.0;
     double currentBalance = 0.0;
     double totalYield = 0.0;
+    bool hasAnyYieldDistributions = false;
 
+    // Check which users have been affected by yield updates (have yield distributions)
     for (var sub in subscriptions) {
-      totalContrib += (sub['total_contrib'] as num?)?.toDouble() ?? 0.0;
-      currentBalance += (sub['current_balance'] as num?)?.toDouble() ?? 0.0;
-      totalYield += (sub['total_yield'] as num?)?.toDouble() ?? 0.0;
+      final userUid = sub['user_uid'] as String;
+      final vehicleId = sub['vehicle_id'] as int;
+      
+      // Check if user has yield distributions (affected by admin yield updates)
+      final hasYieldDistributions = await _supabase
+          .from('user_yield_distributions')
+          .select('id')
+          .eq('user_uid', userUid)
+          .eq('vehicle_id', vehicleId)
+          .limit(1)
+          .maybeSingle();
+
+      final contrib = (sub['total_contrib'] as num?)?.toDouble() ?? 0.0;
+      final balance = (sub['current_balance'] as num?)?.toDouble() ?? 0.0;
+      
+      totalContrib += contrib;
+      currentBalance += balance;
+      
+      // Only calculate yield if user has been affected by yield updates
+      if (hasYieldDistributions != null) {
+        hasAnyYieldDistributions = true;
+        totalYield += (balance - contrib);
+      }
     }
 
-    // Calculate overall yield percentage
+    // Calculate yield percentage from aggregated totals using formula: ((current_balance - total_contrib) / total_contrib) * 100
+    // Only if at least one user has been affected by yield updates
     double yieldPercentage = 0.0;
-    if (totalContrib > 0) {
-      yieldPercentage = (totalYield / totalContrib) * 100;
+    if (hasAnyYieldDistributions && totalContrib > 0) {
+      yieldPercentage = ((currentBalance - totalContrib) / totalContrib) * 100;
     }
 
     return AggregatedSubscriptions(
       totalContributions: totalContrib,
       currentBalance: currentBalance,
-      totalYield: totalYield,
-      yieldPercentage: yieldPercentage,
+      totalYield: totalYield, // Only sum for users affected by yield updates
+      yieldPercentage: yieldPercentage, // Calculate from aggregated totals using formula
     );
   }
 
@@ -129,7 +152,7 @@ class InvestmentService {
     
     final subscriptionResponse = await _supabase
         .from('userinvestmentvehicle')  // Lowercase to match PostgreSQL
-        .select('id, vehicle_id, registered_at, total_contrib, current_balance, total_yield, total_yield_percent')
+        .select('id, vehicle_id, registered_at, total_contrib, current_balance')
         .eq('user_uid', uid)
         .eq('vehicle_id', vehicleId)
         .maybeSingle();
@@ -142,6 +165,15 @@ class InvestmentService {
       print('[InvestmentService] Subscription found: ${subscriptionResponse['id']}');
     }
 
+    // Check if user has been affected by yield updates (has yield distributions)
+    final hasYieldDistributions = await _supabase
+        .from('user_yield_distributions')
+        .select('id')
+        .eq('user_uid', uid)
+        .eq('vehicle_id', vehicleId)
+        .limit(1)
+        .maybeSingle();
+
     if (subscriptionResponse == null) {
       // User is not subscribed, return vehicle info with null subscription
       return UserVehicleSubscription(
@@ -151,6 +183,7 @@ class InvestmentService {
         totalContributions: 0.0,
         currentBalance: 0.0,
         totalYield: 0.0,
+        hasYieldDistributions: false,
       );
     }
 
@@ -162,8 +195,8 @@ class InvestmentService {
       isSubscribed: true,
       totalContributions: (subscriptionResponse['total_contrib'] as num?)?.toDouble() ?? 0.0,
       currentBalance: (subscriptionResponse['current_balance'] as num?)?.toDouble() ?? 0.0,
-      totalYield: (subscriptionResponse['total_yield'] as num?)?.toDouble() ?? 0.0,
-      totalYieldPercent: (subscriptionResponse['total_yield_percent'] as num?)?.toDouble() ?? 0.0,
+      totalYield: 0.0, // Not used - will be calculated
+      hasYieldDistributions: hasYieldDistributions != null,
       registeredAt: subscriptionResponse['registered_at'] != null
           ? DateTime.parse(subscriptionResponse['registered_at'] as String)
           : null,
@@ -294,13 +327,12 @@ class InvestmentService {
 
       print('[InvestmentService] Subscription data: $subscription');
 
-      // Get latest yield distribution for this user and vehicle
+      // Get latest yield distribution for this user and vehicle (using applied_date from yields)
       final latestYield = await _supabase
           .from('user_yield_distributions')
-          .select('gross_yield, balance_before, created_at')
+          .select('gross_yield, balance_before, yield_id, yields!inner(applied_date)')
           .eq('user_uid', uid)
           .eq('vehicle_id', vehicleId)
-          .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
 
@@ -320,7 +352,9 @@ class InvestmentService {
       if (latestYield != null) {
         final grossYield = (latestYield['gross_yield'] as num).toDouble();
         final balanceBefore = (latestYield['balance_before'] as num).toDouble();
-        lastUpdated = DateTime.parse(latestYield['created_at'] as String);
+        // Get applied_date from nested yields object
+        final yieldsData = latestYield['yields'] as Map<String, dynamic>;
+        lastUpdated = DateTime.parse(yieldsData['applied_date'] as String);
         
         if (balanceBefore > 0) {
           latestYieldPercent = (grossYield / balanceBefore) * 100;
@@ -359,7 +393,7 @@ class UserVehicleSubscription {
   final double totalContributions;
   final double currentBalance;
   final double totalYield;
-  final double totalYieldPercent;
+  final bool hasYieldDistributions; // Whether user has been affected by admin yield updates
   final DateTime? registeredAt;
 
   UserVehicleSubscription({
@@ -370,12 +404,29 @@ class UserVehicleSubscription {
     required this.totalContributions,
     required this.currentBalance,
     required this.totalYield,
-    this.totalYieldPercent = 0.0,
+    bool? hasYieldDistributions,
     this.registeredAt,
-  });
+  }) : hasYieldDistributions = hasYieldDistributions ?? false;
 
-  // Use the database value instead of calculating
-  double get yieldPercentage => totalYieldPercent;
+  // Calculate yield percentage ONLY if user has been affected by yield updates
+  // Use formula: ((current_balance - total_contrib) / total_contrib) * 100
+  double get yieldPercentage {
+    if (!hasYieldDistributions) {
+      return 0.0; // Not affected by yield updates, return 0
+    }
+    if (totalContributions > 0) {
+      return ((currentBalance - totalContributions) / totalContributions) * 100;
+    }
+    return 0.0;
+  }
+  
+  // Calculate yield amount ONLY if user has been affected by yield updates
+  double get calculatedYield {
+    if (!hasYieldDistributions) {
+      return 0.0; // Not affected by yield updates, return 0
+    }
+    return currentBalance - totalContributions;
+  }
 }
 
 /// Aggregated subscriptions across all vehicles

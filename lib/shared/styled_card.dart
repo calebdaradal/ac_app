@@ -67,12 +67,14 @@ class HomeCard extends StatelessWidget {
                             child: PrimaryText(
                               yield.toStringAsFixed(2),
                               fontSize: 26,
-                              color: AppColors.increaseColor,
+                              color: yield >= 0 ? AppColors.increaseColor : AppColors.decreaseColor,
                             ),
                           ),
                           const SizedBox(width: 5),
                           SvgPicture.asset(
-                            'assets/img/icons/increase.svg',
+                            yield >= 0 
+                              ? 'assets/img/icons/increase.svg'
+                              : 'assets/img/icons/decrease.svg',
                             width: 25,
                           )
                         ],
@@ -187,7 +189,11 @@ class AFFCard extends StatelessWidget {
                       TitleText(title, color: Colors.white, fontSize: 25,),
                       Row(
                         children: [
-                          TitleText('+${yield.toStringAsFixed(2)}%', fontSize: 18, color: Colors.white), // ask about yield data on db
+                          TitleText(
+                            '${yield >= 0 ? '+' : ''}${yield.toStringAsFixed(2)}%', 
+                            fontSize: 18, 
+                            color: Colors.white
+                          ),
                           const SizedBox(width: 7,),
                           PrimaryTextW('Last updated: ${date}', fontSize: 13,)
                         ],
@@ -350,8 +356,8 @@ class TransactionCard extends StatelessWidget {
                     if (info != null) ...[
                       const SizedBox(height: 4),
                       PrimaryText(
-                        '+${info!.toStringAsFixed(2)}%',
-                        color: AppColors.increaseColor,
+                        '${info! >= 0 ? '+' : ''}${info!.toStringAsFixed(2)}%',
+                        color: info! >= 0 ? AppColors.increaseColor : AppColors.decreaseColor,
                         fontSize: 16,
                       ),
                     ],

@@ -21,10 +21,10 @@ class TransactionHistoryService {
       // 1. Fetch user transactions (deposits and withdrawals)
       final userTransactions = await _supabase
           .from('usertransactions')
-          .select('id, transaction_id, amount, status, date_issued')
+          .select('id, transaction_id, amount, status, applied_at')
           .eq('user_uid', uid)
           .eq('vehicle_id', vehicleId)
-          .order('date_issued', ascending: false);
+          .order('applied_at', ascending: false);
 
       print('[TransactionHistory] Found ${userTransactions.length} user transactions');
 
@@ -32,7 +32,7 @@ class TransactionHistoryService {
         final transactionTypeId = trans['transaction_id'] as int;
         final status = trans['status'] as String;
         final amount = (trans['amount'] as num).toDouble();
-        final dateIssued = DateTime.parse(trans['date_issued'] as String);
+        final appliedAt = DateTime.parse(trans['applied_at'] as String);
 
         String type;
         String displayStatus;
@@ -69,26 +69,37 @@ class TransactionHistoryService {
           amount: amount,
           yieldPercent: null,
           status: displayStatus,
-          date: dateIssued,
+          date: appliedAt,
           isPositive: type == 'Deposit',
         ));
       }
 
-      // 2. Fetch yield distributions
+      // 2. Fetch yield distributions with applied_date from yields table
       final yieldDistributions = await _supabase
           .from('user_yield_distributions')
-          .select('id, net_yield, gross_yield, balance_before, created_at, yield_id, yields!inner(yield_type, yield_amount)')
+          .select('id, net_yield, gross_yield, balance_before, yield_id, yields!inner(yield_type, yield_amount, applied_date)')
           .eq('user_uid', uid)
-          .eq('vehicle_id', vehicleId)
-          .order('created_at', ascending: false);
+          .eq('vehicle_id', vehicleId);
 
       print('[TransactionHistory] Found ${yieldDistributions.length} yield distributions');
 
-      for (var yieldDist in yieldDistributions) {
+      // Sort yield distributions by applied_date (most recent first)
+      final sortedYieldDistributions = (yieldDistributions as List).toList()
+        ..sort((a, b) {
+          final yieldsA = a['yields'] as Map<String, dynamic>;
+          final yieldsB = b['yields'] as Map<String, dynamic>;
+          final dateA = DateTime.parse(yieldsA['applied_date'] as String);
+          final dateB = DateTime.parse(yieldsB['applied_date'] as String);
+          return dateB.compareTo(dateA); // Most recent first
+        });
+
+      for (var yieldDist in sortedYieldDistributions) {
         final netYield = (yieldDist['net_yield'] as num).toDouble();
         final grossYield = (yieldDist['gross_yield'] as num).toDouble();
         final balanceBefore = (yieldDist['balance_before'] as num).toDouble();
-        final createdAt = DateTime.parse(yieldDist['created_at'] as String).toUtc();
+        // Get applied_date from nested yields object
+        final yieldsData = yieldDist['yields'] as Map<String, dynamic>;
+        final appliedDate = DateTime.parse(yieldsData['applied_date'] as String);
         
         // Calculate yield percentage: (gross_yield / balance_before) * 100
         double yieldPercent = 0.0;
@@ -102,8 +113,8 @@ class TransactionHistoryService {
           amount: netYield,
           yieldPercent: yieldPercent,
           status: 'Applied',
-          date: createdAt,
-          isPositive: true,
+          date: appliedDate,
+          isPositive: netYield >= 0, // Positive if net yield is positive, negative otherwise
         ));
       }
 
@@ -163,7 +174,7 @@ class TransactionHistoryItem {
 
   String get displayYieldPercent {
     if (yieldPercent == null) return '';
-    return '+${yieldPercent!.toStringAsFixed(2)}%';
+    return '${yieldPercent! >= 0 ? '+' : ''}${yieldPercent!.toStringAsFixed(2)}%';
   }
 }
 
