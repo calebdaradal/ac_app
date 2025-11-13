@@ -247,11 +247,22 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                           locationName: _bankDetails?.location ?? 'N/A',
                           accountName: _bankDetails?.accountName ?? 'N/A',
                           onTap: () {
-                            showBankDetailsModal(
-                              context,
-                              existingDetails: _bankDetails,
-                              onSaved: _loadBankDetails,
-                            );
+                            try {
+                              showBankDetailsModal(
+                                context,
+                                existingDetails: _bankDetails,
+                                onSaved: () {
+                                  _loadBankDetails();
+                                },
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error opening bank details: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
                           },
                         ),
                         const SizedBox(height: 50.0),

@@ -1,4 +1,4 @@
-import 'package:ac_app/constants/philippines_data.dart';
+import 'package:ac_app/constants/banks_data.dart';
 import 'package:ac_app/services/bank_details_service.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_text.dart';
@@ -26,17 +26,27 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
   final _accountNameController = TextEditingController();
   
   String? _selectedBank;
-  String? _selectedCity;
+  String? _selectedLocation;
+  List<String> _availableBanks = [];
   bool _submitting = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.existingDetails != null) {
-      _selectedBank = widget.existingDetails!.bankName;
+      _selectedLocation = widget.existingDetails!.location;
       _accountNumberController.text = widget.existingDetails!.accountNumber;
-      _selectedCity = widget.existingDetails!.location;
       _accountNameController.text = widget.existingDetails!.accountName;
+      
+      // Load banks for the existing location
+      if (_selectedLocation != null) {
+        _availableBanks = BanksData.getBanksByCountry(_selectedLocation!);
+        // Validate and set the bank if it exists in the list
+        final bankExists = _availableBanks.contains(widget.existingDetails!.bankName);
+        if (bankExists) {
+          _selectedBank = widget.existingDetails!.bankName;
+        }
+      }
     }
   }
 
@@ -62,7 +72,7 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
       return;
     }
 
-    if (_selectedCity == null || _selectedCity!.isEmpty) {
+    if (_selectedLocation == null || _selectedLocation!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a location')),
       );
@@ -82,7 +92,7 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
       await BankDetailsService.saveBankDetails(
         bankName: _selectedBank!,
         accountNumber: _accountNumberController.text.trim(),
-        location: _selectedCity!,
+        location: _selectedLocation!,
         accountName: _accountNameController.text.trim(),
       );
 
@@ -111,18 +121,19 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
+    return SafeArea(
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
         ),
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Form(
@@ -156,6 +167,59 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
                 ),
                 const SizedBox(height: 24),
 
+                // Location Dropdown (should come first to filter banks)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PrimaryText(
+                      'Location',
+                      fontSize: 14,
+                      color: AppColors.titleColor.withOpacity(0.7),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color.fromRGBO(247, 249, 252, 1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedLocation,
+                        decoration: InputDecoration(
+                          hintText: 'Select your location',
+                          hintStyle: TextStyle(
+                            color: AppColors.titleColor.withOpacity(0.5),
+                          ),
+                          filled: true,
+                          fillColor: Colors.transparent,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.transparent),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.primaryColor, width: 2),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        ),
+                        items: BanksData.countries.map((country) {
+                          return DropdownMenuItem(
+                            value: country,
+                            child: Text(country),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedLocation = value;
+                            _selectedBank = null; // Reset bank when location changes
+                            _availableBanks = value != null ? BanksData.getBanksByCountry(value) : [];
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // Bank Name Dropdown
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,7 +238,9 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
                       child: DropdownButtonFormField<String>(
                         value: _selectedBank,
                         decoration: InputDecoration(
-                          hintText: 'Select your bank',
+                          hintText: _selectedLocation == null 
+                              ? 'Select location first' 
+                              : 'Select your bank',
                           hintStyle: TextStyle(
                             color: AppColors.titleColor.withOpacity(0.5),
                           ),
@@ -190,13 +256,13 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
                           ),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                         ),
-                        items: PhilippineBanks.banks.map((bank) {
+                        items: _availableBanks.map((bank) {
                           return DropdownMenuItem(
                             value: bank,
                             child: Text(bank),
                           );
                         }).toList(),
-                        onChanged: (value) {
+                        onChanged: _selectedLocation == null ? null : (value) {
                           setState(() => _selectedBank = value);
                         },
                       ),
@@ -219,55 +285,6 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
                       controller: _accountNumberController,
                       keyboardType: TextInputType.number,
                       label: 'Enter account number',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Location Dropdown
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    PrimaryText(
-                      'Location',
-                      fontSize: 14,
-                      color: AppColors.titleColor.withOpacity(0.7),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color.fromRGBO(247, 249, 252, 1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedCity,
-                        decoration: InputDecoration(
-                          hintText: 'Select your city',
-                          hintStyle: TextStyle(
-                            color: AppColors.titleColor.withOpacity(0.5),
-                          ),
-                          filled: true,
-                          fillColor: Colors.transparent,
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.transparent),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: AppColors.primaryColor, width: 2),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        ),
-                        items: PhilippineCities.cities.map((city) {
-                          return DropdownMenuItem(
-                            value: city,
-                            child: Text(city),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() => _selectedCity = value);
-                        },
-                      ),
                     ),
                   ],
                 ),
@@ -316,6 +333,7 @@ class _BankDetailsModalState extends State<BankDetailsModal> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
