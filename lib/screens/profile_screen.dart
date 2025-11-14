@@ -496,6 +496,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         // title: const TitleText('My Profile', fontSize: 20),
         leading: IconButton(

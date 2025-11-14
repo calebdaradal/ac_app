@@ -19,7 +19,7 @@ class WelcomeScreen extends StatelessWidget {
       backgroundColor: AppColors.primaryColor,
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(10.0),
+          padding: const EdgeInsets.all(18.0),
           child: Column(
             children: [
               const Spacer(), // pushes content down
@@ -33,6 +33,48 @@ class WelcomeScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 // crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      PrimaryTextW('Want to be a partner? '),
+                      GestureDetector(
+                        onTap: () =>
+                            Navigator.pushNamed(context, AuthEmailScreen.routeName),
+                        child: const PrimaryTextW(
+                          'Sign up here',
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
+                  ),
+              
+                  const SizedBox(height: 20),
+              
+                  // Row(
+                  //   // crossAxisAlignment: CrossAxisAlignment.baseline,
+                  //   // textBaseline: TextBaseline.alphabetic,
+                  //   mainAxisAlignment: MainAxisAlignment.start,
+                  //   children: [
+                  //     GestureDetector(
+                  //       onTap: () {},
+                  //       child: const PrimaryTextW('Learn more about our vetting process', decoration: TextDecoration.underline),
+                  //     ),
+                  //     const SizedBox(width: 8,),
+                  //     Padding(
+                  //       padding: const EdgeInsets.only(top: 3.0),
+                  //       child: SvgPicture.asset(
+                  //         'assets/img/icons/white_arrow.svg',
+                  //         width: 16,
+                  //         height: 16,
+                  //         alignment: Alignment.bottomCenter,
+                  //       ),
+                  //     )
+                  //   ],
+                  // ),
+
+                  // const SizedBox(height: 20),
+
                   Row(
                     children: [
                       Expanded(
@@ -55,48 +97,7 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-              
-                  const SizedBox(height: 40),
-              
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      PrimaryTextW('Want to be a partner? '),
-                      GestureDetector(
-                        onTap: () =>
-                            Navigator.pushNamed(context, AuthEmailScreen.routeName),
-                        child: const PrimaryTextW(
-                          'Sign up here',
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ],
-                  ),
-              
-                  const SizedBox(height: 10),
-              
-                  Row(
-                    // crossAxisAlignment: CrossAxisAlignment.baseline,
-                    // textBaseline: TextBaseline.alphabetic,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: () {},
-                        child: const PrimaryTextW('Learn more about our vetting process', decoration: TextDecoration.underline),
-                      ),
-                      const SizedBox(width: 8,),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 3.0),
-                        child: SvgPicture.asset(
-                          'assets/img/icons/white_arrow.svg',
-                          width: 16,
-                          height: 16,
-                          alignment: Alignment.bottomCenter,
-                        ),
-                      )
-                    ],
-                  ),
-              
+
                   const SizedBox(height: 70),
                 ],
               ),

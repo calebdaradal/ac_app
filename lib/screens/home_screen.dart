@@ -185,18 +185,18 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 
                 children: [
-                  InkWell(
-                    onTap: () {},
-                    borderRadius: BorderRadius.all(Radius.circular(25)),
-                    highlightColor: Colors.white,
-                    child: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: SvgPicture.asset(
-                        'assets/img/icons/notification.svg',
-                        width: 29,
-                        ),
-                    ),
-                  ),
+                  // InkWell(
+                  //   onTap: () {},
+                  //   borderRadius: BorderRadius.all(Radius.circular(25)),
+                  //   highlightColor: Colors.white,
+                  //   child: Padding(
+                  //     padding: const EdgeInsets.all(4.0),
+                  //     child: SvgPicture.asset(
+                  //       'assets/img/icons/notification.svg',
+                  //       width: 29,
+                  //       ),
+                  //   ),
+                  // ),
     
                   // const SizedBox(width: 3,),
     
