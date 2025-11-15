@@ -315,7 +315,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 DiscoverCard(
                   color: AppColors.secondaryColor,
                   title: 'Discover more opportunities',
-                  onTap: () {}
+                  onTap: () {},
+                  enabled: false,
                 )
               ],
             ),

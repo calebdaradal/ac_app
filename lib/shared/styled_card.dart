@@ -222,12 +222,14 @@ class DiscoverCard extends StatelessWidget {
     required this.title,
     required this.onTap,
     required this.color,
+    this.enabled = true,
     super.key
     });
 
     final void Function() onTap;
     final dynamic color;
     final String title;
+    final bool enabled;
 
 
   @override
@@ -237,39 +239,53 @@ class DiscoverCard extends StatelessWidget {
         Theme.of(context).cardTheme.shape ??
         RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
-      color: color,
-      shadowColor: Colors.transparent,
-      shape: shape,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        // borderRadius: BorderRadius.all(Radius.circular(16)),
-        highlightColor: Colors.grey.withOpacity(0.5),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TitleText(title, fontSize: 20,),
-                    ],
-                  ),
+    final disabledColor = Colors.grey.withOpacity(0.3);
+    final cardColor = enabled ? color : disabledColor;
+
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.5,
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
+        color: cardColor,
+        shadowColor: Colors.transparent,
+        shape: shape,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          // borderRadius: BorderRadius.all(Radius.circular(16)),
+          highlightColor: enabled ? Colors.grey.withOpacity(0.5) : Colors.transparent,
+          splashColor: enabled ? Colors.grey.withOpacity(0.3) : Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TitleText(
+                          title, 
+                          fontSize: 20,
+                          color: enabled ? null : Colors.grey,
+                        ),
+                      ],
+                    ),
         
-                  Expanded(child: SizedBox(),),
+                    Expanded(child: SizedBox(),),
         
-                  SvgPicture.asset(
-                    'assets/img/icons/orange_arrow_circle.svg',
-                    width: 36,
-                  ),
-                ],
-              )
-            ],
+                    Opacity(
+                      opacity: enabled ? 1.0 : 0.4,
+                      child: SvgPicture.asset(
+                        'assets/img/icons/orange_arrow_circle.svg',
+                        width: 36,
+                      ),
+                    ),
+                  ],
+                )
+              ],
+            ),
           ),
         ),
       ),
