@@ -82,6 +82,10 @@ class _AscScreenState extends State<AscScreen> {
     }
   }
 
+  Future<void> _refreshData() async {
+    await _loadSubscriptionData();
+  }
+
   Future<void> _navigateToDeposit() async {
     if (_subscription == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -256,8 +260,12 @@ class _AscScreenState extends State<AscScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-        child: Column(
+          : RefreshIndicator(
+        onRefresh: _refreshData,
+        color: AppColors.primaryColor,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
@@ -403,6 +411,7 @@ class _AscScreenState extends State<AscScreen> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

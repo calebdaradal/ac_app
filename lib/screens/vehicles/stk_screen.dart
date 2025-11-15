@@ -83,6 +83,10 @@ class _StkScreenState extends State<StkScreen> {
     }
   }
 
+  Future<void> _refreshData() async {
+    await _loadSubscriptionData();
+  }
+
   Future<void> _navigateToDeposit() async {
     if (_subscription == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -227,8 +231,12 @@ class _StkScreenState extends State<StkScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-        child: Column(
+          : RefreshIndicator(
+        onRefresh: _refreshData,
+        color: AppColors.tertiaryColor,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
@@ -373,6 +381,7 @@ class _StkScreenState extends State<StkScreen> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
