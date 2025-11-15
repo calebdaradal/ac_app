@@ -110,9 +110,19 @@ class _StkScreenState extends State<StkScreen> {
 
   Future<void> _navigateToWithdraw() async {
     if (_subscription == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to load vehicle information')),
-      );
+      await _showWarningDialog('Unable to load vehicle information');
+      return;
+    }
+
+    // Check if user is subscribed to this vehicle
+    if (!_subscription!.isSubscribed) {
+      await _showWarningDialog('You must have an active investment to withdraw');
+      return;
+    }
+
+    // Check if user has sufficient balance
+    if (_subscription!.currentBalance <= 0) {
+      await _showWarningDialog('Insufficient balance for withdrawal');
       return;
     }
     
@@ -127,6 +137,71 @@ class _StkScreenState extends State<StkScreen> {
       _loadSubscriptionData();
       _loadTransactionHistory();
     }
+  }
+
+  Future<void> _showWarningDialog(String message) async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Warning Icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.warning_rounded,
+                  color: Colors.orange.shade700,
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // Title
+              const TitleText(
+                'Unable to Withdraw',
+                fontSize: 22,
+              ),
+              const SizedBox(height: 12),
+              
+              // Message
+              SecondaryText(
+                message,
+                fontSize: 14,
+              ),
+              const SizedBox(height: 32),
+              
+              // OK Button
+              SizedBox(
+                width: double.infinity,
+                child: StyledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
   void _showTransactionsSheet() {
     showModalBottomSheet(
