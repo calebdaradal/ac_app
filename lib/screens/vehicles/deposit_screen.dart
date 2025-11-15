@@ -164,30 +164,63 @@ class _DepositFundsState extends State<DepositFunds> {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Column(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 64),
-            const SizedBox(height: 16),
-            const TitleText('Deposit Submitted', fontSize: 20),
-          ],
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
         ),
-        content: const Center(
-          child: SecondaryText(
-            'Your deposit has been submitted for verification. You will be notified once it has been processed.',
-            fontSize: 14,
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Success Icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppColors.increaseColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.increaseColor,
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // Title
+              const TitleText(
+                'Deposit Submitted',
+                fontSize: 22,
+              ),
+              const SizedBox(height: 12),
+              
+              // Message
+              const SecondaryText(
+                'Your deposit has been submitted for verification. You will be notified once it has been processed.',
+                fontSize: 14,
+              ),
+              const SizedBox(height: 32),
+              
+              // OK Button
+              SizedBox(
+                width: double.infinity,
+                child: StyledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: StyledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ),
-        ],
       ),
     );
   }
