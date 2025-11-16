@@ -1,6 +1,7 @@
 import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/shared/styled_textfield.dart';
 import 'package:ac_app/shared/styled_button.dart';
+import 'package:ac_app/shared/success_dialog.dart';
 import 'package:ac_app/services/bank_details_service.dart';
 import 'package:ac_app/services/transaction_service.dart';
 import 'package:ac_app/constants/transaction_constants.dart';
@@ -141,8 +142,8 @@ class _DepositFundsState extends State<DepositFunds> {
       );
 
       if (mounted) {
-        // Show success modal
-        await _showSuccessDialog();
+        // Show success dialog
+        await showSuccessDialog(context, 'Deposit submitted successfully!');
         
         // Navigate back to vehicle screen
         Navigator.pop(context, true);
@@ -160,70 +161,6 @@ class _DepositFundsState extends State<DepositFunds> {
     }
   }
 
-  Future<void> _showSuccessDialog() async {
-    return showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Success Icon
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: AppColors.increaseColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.check_circle_rounded,
-                  color: AppColors.increaseColor,
-                  size: 48,
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Title
-              const TitleText(
-                'Deposit Submitted',
-                fontSize: 22,
-              ),
-              const SizedBox(height: 12),
-              
-              // Message
-              const SecondaryText(
-                'Your deposit has been submitted for verification. You will be notified once it has been processed.',
-                fontSize: 14,
-              ),
-              const SizedBox(height: 32),
-              
-              // OK Button
-              SizedBox(
-                width: double.infinity,
-                child: StyledButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'OK',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   String _getFlagEmoji(String location) {
     if (location == 'Philippines') return '🇵🇭';
@@ -568,12 +505,7 @@ Account Name: ${detail.accountName}
 Account Number: ${detail.accountNumber}${detail.location == 'UK' && detail.shortCode != null ? '\nShort Code: ${detail.shortCode}' : ''}
 ''';
                     Clipboard.setData(ClipboardData(text: text));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Bank details copied to clipboard'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
+                    showSuccessDialog(context, 'Bank details copied to clipboard');
                   },
                   tooltip: 'Copy details',
                 ),

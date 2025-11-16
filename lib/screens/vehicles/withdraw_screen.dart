@@ -6,6 +6,7 @@ import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_card.dart';
 import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/shared/styled_textfield.dart';
+import 'package:ac_app/shared/success_dialog.dart';
 import 'package:ac_app/theme.dart';
 import 'package:ac_app/widgets/bank_details_modal.dart';
 import 'package:flutter/material.dart';
@@ -190,24 +191,19 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
 
       if (!mounted) return;
 
-      // Show success message
+      // Build success message
       String message = 'Withdrawal submitted!';
       if (_feeAmount > 0) {
-        message += '\nWithdrawal: ₱${amount.toStringAsFixed(2)}';
+        message += '\n\nWithdrawal: ₱${amount.toStringAsFixed(2)}';
         message += '\nFee (5%): ₱${_feeAmount.toStringAsFixed(2)}';
         message += '\nTotal deduction: ₱${_totalAmount.toStringAsFixed(2)}';
       } else {
-        message += '\nAmount: ₱${amount.toStringAsFixed(2)}';
+        message += '\n\nAmount: ₱${amount.toStringAsFixed(2)}';
       }
-      message += '\nWaiting for admin verification.';
+      message += '\n\nWaiting for admin verification.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: AppColors.primaryColor,
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      // Show success dialog
+      await showSuccessDialog(context, message);
 
       // Return true to signal successful Withdrawal submission
       Navigator.pop(context, true);

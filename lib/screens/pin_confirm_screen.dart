@@ -1,4 +1,5 @@
 import 'package:ac_app/shared/styled_text.dart';
+import 'package:ac_app/shared/success_dialog.dart';
 import 'package:ac_app/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
@@ -70,12 +71,7 @@ class _PinConfirmScreenState extends State<PinConfirmScreen> {
         if (mounted) {
           if (isUpdating) {
             // If updating, show success message and pop back to profile
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('PIN updated successfully!'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            await showSuccessDialog(context, 'PIN updated successfully!');
             // Pop back to profile screen (remove verify + create + confirm screens)
             Navigator.popUntil(context, (route) => route.settings.name == '/profile');
           } else {

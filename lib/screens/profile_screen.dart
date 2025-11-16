@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../shared/styled_text.dart';
 import '../shared/styled_textfield.dart';
 import '../shared/styled_button.dart';
+import '../shared/success_dialog.dart';
 import '../theme.dart';
 import '../services/user_profile_service.dart';
 import '../services/bank_details_service.dart';
@@ -171,12 +172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await UserProfileService().refreshProfile();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        showSuccessDialog(context, 'Profile updated successfully!');
       }
     } catch (e) {
       if (mounted) {
@@ -236,12 +232,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bank details updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        showSuccessDialog(context, 'Bank details updated successfully!');
       }
     } catch (e) {
       if (mounted) {
