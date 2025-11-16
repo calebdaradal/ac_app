@@ -5,6 +5,7 @@ import 'package:ac_app/services/transaction_service.dart';
 import 'package:ac_app/services/investment_service.dart';
 import 'package:ac_app/services/yield_service.dart';
 import 'package:ac_app/services/deposit_service.dart';
+import 'package:ac_app/services/withdrawal_service.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/success_dialog.dart';
 import 'package:flutter/material.dart';
@@ -405,7 +406,7 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, {bool isBold = false, Color? color}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
@@ -416,7 +417,14 @@ class _AdminScreenState extends State<AdminScreen> {
             child: SecondaryText(label, fontSize: 13, color: Colors.grey.shade600),
           ),
           Expanded(
-            child: PrimaryText(value, fontSize: 13, color: AppColors.titleColor),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+                color: color ?? AppColors.titleColor,
+              ),
+            ),
           ),
         ],
       ),
@@ -1283,6 +1291,618 @@ class _AdminScreenState extends State<AdminScreen> {
     });
   }
 
+  Future<void> _showWithdrawModal() async {
+    UserProfile? selectedUser;
+    int? selectedVehicleId;
+    final amountController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    bool isSubmitting = false;
+    List<UserProfile> users = [];
+    double? currentBalance;
+    bool isLoadingBalance = false;
+
+    // Load users with contributions > 0
+    try {
+      users = await WithdrawalService.getUsersWithContributions();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading users: $e')),
+        );
+      }
+      return;
+    }
+
+    if (users.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No users with contributions found')),
+        );
+      }
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Function to load balance when user/vehicle changes
+            Future<void> loadBalance() async {
+              if (selectedUser == null || selectedVehicleId == null) {
+                return;
+              }
+              
+              setDialogState(() {
+                isLoadingBalance = true;
+              });
+
+              try {
+                final balance = await WithdrawalService.getCurrentBalance(
+                  userUid: selectedUser!.uid,
+                  vehicleId: selectedVehicleId!,
+                );
+                setDialogState(() {
+                  currentBalance = balance;
+                  isLoadingBalance = false;
+                });
+              } catch (e) {
+                setDialogState(() {
+                  currentBalance = null;
+                  isLoadingBalance = false;
+                });
+              }
+            }
+            // Calculate fee and total withdrawal in real-time
+            double withdrawalAmount = 0.0;
+            double feeAmount = 0.0;
+            double totalWithdrawal = 0.0;
+            
+            if (amountController.text.isNotEmpty) {
+              final parsedAmount = double.tryParse(amountController.text.trim());
+              if (parsedAmount != null && parsedAmount > 0) {
+                withdrawalAmount = (parsedAmount * 100).round() / 100.0;
+                
+                if (currentBalance != null && currentBalance! > 0) {
+                  final threshold = currentBalance! * 0.3333;
+                  if (withdrawalAmount > threshold) {
+                    feeAmount = (withdrawalAmount * 0.05 * 100).round() / 100.0;
+                  }
+                  totalWithdrawal = (withdrawalAmount + feeAmount) * 100;
+                  totalWithdrawal = totalWithdrawal.round() / 100.0;
+                }
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              title: Row(
+                children: [
+                  Icon(Icons.account_balance_wallet_outlined, color: Colors.red.shade700),
+                  const SizedBox(width: 12),
+                  const TitleText('Apply Withdrawal', fontSize: 20),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.9,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // User Dropdown
+                      const SecondaryText('User', fontSize: 14),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(247, 249, 252, 1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButtonFormField<UserProfile>(
+                          value: selectedUser,
+                          decoration: InputDecoration(
+                            hintText: 'Select user',
+                            hintStyle: TextStyle(
+                              color: AppColors.titleColor.withOpacity(0.5),
+                            ),
+                            filled: true,
+                            fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: users.map((user) {
+                            final displayText = user.fullName != 'User' 
+                                ? '${user.fullName} (${user.email})' 
+                                : user.email;
+                            return DropdownMenuItem<UserProfile>(
+                              value: user,
+                              child: Text(
+                                displayText,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setDialogState(() {
+                              selectedUser = value;
+                              selectedVehicleId = null; // Reset vehicle when user changes
+                              currentBalance = null;
+                              amountController.clear();
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Vehicle Dropdown
+                      const SecondaryText('Investment Vehicle', fontSize: 14),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(247, 249, 252, 1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButtonFormField<int>(
+                          value: selectedVehicleId,
+                          decoration: InputDecoration(
+                            hintText: 'Select vehicle',
+                            hintStyle: TextStyle(
+                              color: AppColors.titleColor.withOpacity(0.5),
+                            ),
+                            filled: true,
+                            fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: [
+                            DropdownMenuItem<int>(
+                              value: 1,
+                              child: Text('Ascendo Futures Fund'),
+                            ),
+                            DropdownMenuItem<int>(
+                              value: 2,
+                              child: Text('SOL/ETH Staking Pool'),
+                            ),
+                          ],
+                          onChanged: selectedUser == null ? null : (value) {
+                            setDialogState(() {
+                              selectedVehicleId = value;
+                              currentBalance = null;
+                              amountController.clear();
+                            });
+                            loadBalance();
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Current Balance Display
+                      if (selectedUser != null && selectedVehicleId != null) ...[
+                        if (isLoadingBalance)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                SizedBox(width: 8),
+                                SecondaryText('Loading balance...', fontSize: 14),
+                              ],
+                            ),
+                          )
+                        else if (currentBalance != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.account_balance_wallet, color: Colors.blue.shade700, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      SecondaryText(
+                                        'Current Balance',
+                                        fontSize: 12,
+                                        color: Colors.blue.shade900,
+                                      ),
+                                      TitleText(
+                                        _formatCurrency(currentBalance!),
+                                        fontSize: 16,
+                                        color: Colors.blue.shade900,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ],
+
+                      // Amount Input
+                      const SecondaryText('Withdrawal Amount', fontSize: 14),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(247, 249, 252, 1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: TextField(
+                          controller: amountController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          onChanged: (value) {
+                            setDialogState(() {}); // Trigger rebuild to update fee calculation
+                          },
+                          decoration: InputDecoration(
+                            hintText: 'Enter amount',
+                            prefixText: '₱ ',
+                            hintStyle: TextStyle(
+                              color: AppColors.titleColor.withOpacity(0.5),
+                            ),
+                            filled: true,
+                            fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                      
+                      // Real-time Fee and Total Display
+                      if (withdrawalAmount > 0 && currentBalance != null && currentBalance! > 0) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: feeAmount > 0 ? Colors.orange.shade50 : Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: feeAmount > 0 ? Colors.orange.shade200 : Colors.green.shade200,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    feeAmount > 0 ? Icons.warning_amber_rounded : Icons.info_outline,
+                                    color: feeAmount > 0 ? Colors.orange.shade700 : Colors.green.shade700,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: SecondaryText(
+                                      feeAmount > 0 
+                                          ? '5% fee applies (withdrawal > 33.33% of balance)'
+                                          : 'No fee (withdrawal ≤ 33.33% of balance)',
+                                      fontSize: 12,
+                                      color: feeAmount > 0 ? Colors.orange.shade900 : Colors.green.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              _buildDetailRow('Withdrawal Amount', _formatCurrency(withdrawalAmount)),
+                              if (feeAmount > 0)
+                                _buildDetailRow('Fee (5%)', _formatCurrency(feeAmount)),
+                              const Divider(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  SecondaryText('Total Deduction', fontSize: 13, color: Colors.grey.shade600),
+                                  Text(
+                                    _formatCurrency(totalWithdrawal),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (currentBalance != null) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    SecondaryText('Balance After', fontSize: 13, color: Colors.grey.shade600),
+                                    Text(
+                                      _formatCurrency(currentBalance! - totalWithdrawal),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 16),
+
+                      // Date Picker
+                      const SecondaryText('Applied Date', fontSize: 14),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              selectedDate = picked;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color.fromRGBO(247, 249, 252, 1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today, color: AppColors.primaryColor, size: 20),
+                              const SizedBox(width: 12),
+                              Text(
+                                DateFormat('MMM dd, yyyy').format(selectedDate),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: AppColors.titleColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: SecondaryText(
+                    'Cancel',
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                StyledButton(
+                  onPressed: isSubmitting ? null : () async {
+                    // Validate inputs
+                    if (selectedUser == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a user')),
+                      );
+                      return;
+                    }
+
+                    if (selectedVehicleId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a vehicle')),
+                      );
+                      return;
+                    }
+
+                    if (amountController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter withdrawal amount')),
+                      );
+                      return;
+                    }
+
+                    final amount = double.tryParse(amountController.text.trim());
+                    if (amount == null || amount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a valid amount greater than zero')),
+                      );
+                      return;
+                    }
+
+                    if (currentBalance == null || currentBalance! <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Unable to load user balance')),
+                      );
+                      return;
+                    }
+
+                    if (totalWithdrawal > currentBalance!) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Insufficient balance. Available: ${_formatCurrency(currentBalance!)}, Required: ${_formatCurrency(totalWithdrawal)}')),
+                      );
+                      return;
+                    }
+
+                    // Show confirmation dialog
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: Colors.white,
+                        surfaceTintColor: Colors.transparent,
+                        title: const TitleText('Confirm Withdrawal Application', fontSize: 18),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SecondaryText(
+                              'User: ${selectedUser!.fullName}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Vehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Withdrawal: ₱${_formatCurrency(withdrawalAmount)}',
+                              fontSize: 14,
+                            ),
+                            if (feeAmount > 0) ...[
+                              const SizedBox(height: 8),
+                              SecondaryText(
+                                'Fee (5%): ₱${_formatCurrency(feeAmount)}',
+                                fontSize: 14,
+                                color: Colors.orange,
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Total Deduction: ₱${_formatCurrency(totalWithdrawal)}',
+                              fontSize: 14,
+                              color: Colors.red.shade700,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 16),
+                            SecondaryText(
+                              '⚠️ This will reset the user\'s yield to 0 and update their balance.',
+                              fontSize: 13,
+                              color: Colors.orange,
+                            ),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const SecondaryText('Cancel', fontSize: 14),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade700,
+                            ),
+                            child: const Text('Confirm'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm != true) return;
+
+                    // Apply withdrawal
+                    setDialogState(() {
+                      isSubmitting = true;
+                    });
+
+                    try {
+                      await WithdrawalService.applyWithdrawal(
+                        userUid: selectedUser!.uid,
+                        vehicleId: selectedVehicleId!,
+                        amount: withdrawalAmount,
+                        appliedDate: selectedDate,
+                      );
+
+                      if (mounted) {
+                        Navigator.pop(dialogContext);
+                        
+                        // Show success dialog
+                        String successMessage = 'Withdrawal applied successfully!\n\n';
+                        successMessage += 'User: ${selectedUser!.fullName}\n';
+                        successMessage += 'Vehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}\n';
+                        successMessage += 'Withdrawal: ₱${_formatCurrency(withdrawalAmount)}\n';
+                        if (feeAmount > 0) {
+                          successMessage += 'Fee: ₱${_formatCurrency(feeAmount)}\n';
+                        }
+                        successMessage += 'Total: ₱${_formatCurrency(totalWithdrawal)}';
+                        
+                        await showSuccessDialog(context, successMessage);
+                        
+                        // Refresh transactions
+                        _loadTransactions();
+                      }
+                    } catch (e) {
+                      setDialogState(() {
+                        isSubmitting = false;
+                      });
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error applying withdrawal: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text('Apply Withdrawal'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    // Dispose controller after dialog animation completes
+    Future.delayed(const Duration(milliseconds: 300), () {
+      try {
+        amountController.dispose();
+      } catch (e) {
+        // Controller already disposed, ignore
+        print('[WithdrawModal] Controller disposal: $e');
+      }
+    });
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final profile = UserProfileService().profile;
@@ -1370,6 +1990,18 @@ class _AdminScreenState extends State<AdminScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(4.0),
                         child: Icon(Icons.account_balance_wallet, size: 29, color: AppColors.primaryColor),
+                      ),
+                    ),
+                    
+                    InkWell(
+                      onTap: () {
+                        _showWithdrawModal();
+                      },
+                      borderRadius: BorderRadius.all(Radius.circular(25)),
+                      highlightColor: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Icon(Icons.account_balance_wallet_outlined, size: 29, color: Colors.red.shade700),
                       ),
                     ),
                     
