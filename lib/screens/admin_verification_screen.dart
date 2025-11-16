@@ -130,6 +130,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
           vehicleId: transaction.vehicleId!,
           amount: transaction.amount!,
           userUid: transaction.userUid,
+          appliedDate: appliedDate,
         );
 
         // Update transaction status to VERIFIED and applied_at date

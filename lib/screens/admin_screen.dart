@@ -4,7 +4,9 @@ import 'package:ac_app/constants/transaction_constants.dart';
 import 'package:ac_app/services/transaction_service.dart';
 import 'package:ac_app/services/investment_service.dart';
 import 'package:ac_app/services/yield_service.dart';
+import 'package:ac_app/services/deposit_service.dart';
 import 'package:ac_app/shared/styled_button.dart';
+import 'package:ac_app/shared/success_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -95,6 +97,17 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _approveTransaction(UserTransaction transaction) async {
+    // Validate required fields
+    if (transaction.vehicleId == null || transaction.amount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Transaction missing required information (vehicle_id or amount)'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final isWithdrawal = transaction.transactionId == TransactionType.withdrawal;
 
     // Show date picker for admin to set applied date
@@ -155,6 +168,7 @@ class _AdminScreenState extends State<AdminScreen> {
           vehicleId: transaction.vehicleId!,
           amount: transaction.amount!,
           userUid: transaction.userUid,
+          appliedDate: appliedDate,
         );
 
         await TransactionService.updateTransactionStatus(
@@ -877,6 +891,393 @@ class _AdminScreenState extends State<AdminScreen> {
     });
   }
 
+  Future<void> _showDepositModal() async {
+    UserProfile? selectedUser;
+    int? selectedVehicleId;
+    final amountController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    bool isSubmitting = false;
+    List<UserProfile> users = [];
+
+    // Load users
+    try {
+      users = await DepositService.getAllUsers();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading users: $e')),
+        );
+      }
+      return;
+    }
+
+    if (users.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No users found')),
+        );
+      }
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.account_balance_wallet, color: AppColors.primaryColor),
+                  const SizedBox(width: 12),
+                  const TitleText('Apply Deposit', fontSize: 20),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.9,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // User Dropdown
+                      const SecondaryText('User', fontSize: 14),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(247, 249, 252, 1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButtonFormField<UserProfile>(
+                          value: selectedUser,
+                          decoration: InputDecoration(
+                            hintText: 'Select user',
+                            hintStyle: TextStyle(
+                              color: AppColors.titleColor.withOpacity(0.5),
+                            ),
+                            filled: true,
+                            fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: users.map((user) {
+                            final displayText = user.fullName != 'User' 
+                                ? '${user.fullName} (${user.email})' 
+                                : user.email;
+                            return DropdownMenuItem<UserProfile>(
+                              value: user,
+                              child: Text(
+                                displayText,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setDialogState(() {
+                              selectedUser = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Vehicle Dropdown
+                      const SecondaryText('Investment Vehicle', fontSize: 14),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(247, 249, 252, 1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButtonFormField<int>(
+                          value: selectedVehicleId,
+                          decoration: InputDecoration(
+                            hintText: 'Select vehicle',
+                            hintStyle: TextStyle(
+                              color: AppColors.titleColor.withOpacity(0.5),
+                            ),
+                            filled: true,
+                            fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: [
+                            DropdownMenuItem<int>(
+                              value: 1,
+                              child: Text('Ascendo Futures Fund'),
+                            ),
+                            DropdownMenuItem<int>(
+                              value: 2,
+                              child: Text('SOL/ETH Staking Pool'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setDialogState(() {
+                              selectedVehicleId = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Amount Input
+                      const SecondaryText('Deposit Amount', fontSize: 14),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(247, 249, 252, 1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: TextField(
+                          controller: amountController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(
+                            hintText: 'Enter amount',
+                            prefixText: '₱ ',
+                            hintStyle: TextStyle(
+                              color: AppColors.titleColor.withOpacity(0.5),
+                            ),
+                            filled: true,
+                            fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Date Picker
+                      const SecondaryText('Applied Date', fontSize: 14),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              selectedDate = picked;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color.fromRGBO(247, 249, 252, 1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today, color: AppColors.primaryColor, size: 20),
+                              const SizedBox(width: 12),
+                              Text(
+                                DateFormat('MMM dd, yyyy').format(selectedDate),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: AppColors.titleColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: SecondaryText(
+                    'Cancel',
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                StyledButton(
+                  onPressed: isSubmitting ? null : () async {
+                    // Validate inputs
+                    if (selectedUser == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a user')),
+                      );
+                      return;
+                    }
+
+                    if (selectedVehicleId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a vehicle')),
+                      );
+                      return;
+                    }
+
+                    if (amountController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter deposit amount')),
+                      );
+                      return;
+                    }
+
+                    final amount = double.tryParse(amountController.text.trim());
+                    if (amount == null || amount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a valid amount greater than zero')),
+                      );
+                      return;
+                    }
+
+                    // Show confirmation dialog
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const TitleText('Confirm Deposit Application', fontSize: 18),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SecondaryText(
+                              'User: ${selectedUser!.fullName}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Vehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Amount: ₱${_formatCurrency(amount)}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 16),
+                            SecondaryText(
+                              'This will create a deposit transaction for the selected user.',
+                              fontSize: 13,
+                              color: Colors.orange,
+                            ),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const SecondaryText('Cancel', fontSize: 14),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryColor,
+                            ),
+                            child: const Text('Confirm'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm != true) return;
+
+                    // Apply deposit
+                    setDialogState(() {
+                      isSubmitting = true;
+                    });
+
+                    try {
+                      await DepositService.applyDeposit(
+                        userUid: selectedUser!.uid,
+                        vehicleId: selectedVehicleId!,
+                        amount: amount,
+                        appliedDate: selectedDate,
+                      );
+
+                      if (mounted) {
+                        Navigator.pop(dialogContext);
+                        
+                        // Show success dialog
+                        await showSuccessDialog(
+                          context,
+                          'Deposit applied successfully!\n\nUser: ${selectedUser!.fullName}\nVehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}\nAmount: ₱${_formatCurrency(amount)}',
+                        );
+                        
+                        // Refresh transactions
+                        _loadTransactions();
+                      }
+                    } catch (e) {
+                      setDialogState(() {
+                        isSubmitting = false;
+                      });
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error applying deposit: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text('Apply Deposit'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    // Dispose controller after dialog animation completes
+    Future.delayed(const Duration(milliseconds: 300), () {
+      try {
+        amountController.dispose();
+      } catch (e) {
+        // Controller already disposed, ignore
+        print('[DepositModal] Controller disposal: $e');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = UserProfileService().profile;
@@ -952,6 +1353,18 @@ class _AdminScreenState extends State<AdminScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(4.0),
                         child: Icon(Icons.percent_rounded, size: 29, color: AppColors.primaryColor),
+                      ),
+                    ),
+                    
+                    InkWell(
+                      onTap: () {
+                        _showDepositModal();
+                      },
+                      borderRadius: BorderRadius.all(Radius.circular(25)),
+                      highlightColor: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Icon(Icons.account_balance_wallet, size: 29, color: AppColors.primaryColor),
                       ),
                     ),
                     

@@ -132,9 +132,15 @@ class _DepositFundsState extends State<DepositFunds> {
       }
       final refNumber = int.parse(_refNumberController.text.trim());
 
+      // Apply 2% fee reduction
+      const feePercentage = 0.02;
+      final amountAfterFee = amount * (1 - feePercentage);
+      // Round to 2 decimal places to avoid calculation errors
+      final amountAfterFeeRounded = (amountAfterFee * 100).round() / 100.0;
+
       await TransactionService.createTransaction(
         transactionTypeId: TransactionType.deposit,
-        amount: amount,
+        amount: amountAfterFeeRounded, // Store amount after 2% fee reduction (rounded to 2 decimals)
         bankDetailId: _selectedUserBankDetail!.id, // Use selected user bank detail
         status: TransactionStatus.pending,
         vehicleId: _vehicleId,

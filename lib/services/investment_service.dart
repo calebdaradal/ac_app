@@ -203,15 +203,20 @@ class InvestmentService {
     );
   }
 
-  /// Create first deposit and subscribe user to vehicle
-  /// Applies 2% fee to the deposit
+  /// Create deposit and subscribe user to vehicle (or update existing subscription)
+  /// Amount parameter is already after 2% fee reduction (as stored in database)
+  /// - Current Balance: adds the stored amount (after fee)
+  /// - Total Contributions: adds the original amount (before fee, reversed from stored amount)
   /// 
   /// [userUid] - Optional. Used by admins to process deposits for other users.
   ///             If not provided, uses the current authenticated user's UID.
+  /// [appliedDate] - Optional. Date to use for registered_at when creating new subscription.
+  ///                 If not provided, uses DateTime.now().
   static Future<DepositResult> createDeposit({
     required int vehicleId,
     required double amount,
     String? userUid, // Optional: for admin to process deposits for other users
+    DateTime? appliedDate, // Optional: date for registered_at when creating new subscription
   }) async {
     // Use provided userUid (for admin) or current user's UID (for self-deposits)
     final uid = userUid ?? UserProfileService().profile?.uid;
@@ -221,10 +226,25 @@ class InvestmentService {
 
     print('[InvestmentService] Creating deposit for user: $uid (admin processing: ${userUid != null})');
 
-    // Calculate 2% fee
+    // Amount stored in database is already after 2% reduction
+    // Reverse the 2% reduction to get original value for total_contrib
     const feePercentage = 0.02;
-    final feeAmount = amount * feePercentage;
-    final amountAfterFee = amount - feeAmount;
+    // To perfectly reverse: divide by (1 - feePercentage) instead of multiply by (1 + feePercentage)
+    // Example: 294 / 0.98 = 300 (perfect reversal)
+    final originalAmount = amount / (1 - feePercentage); // Reverse: amount / 0.98
+    
+    // Fail-safe: Round to 2 decimal places to ensure precision
+    final originalAmountRounded = (originalAmount * 100).round() / 100.0;
+    
+    // Validate: Ensure original amount is greater than stored amount
+    if (originalAmountRounded <= amount) {
+      throw Exception('Invalid deposit amount: failed to reverse 2% fee reduction');
+    }
+    
+    // Current balance uses the stored amount (after fee)
+    // Total contributions uses the original amount (before fee, perfectly reversed)
+    final amountForCurrentBalance = amount;
+    final amountForTotalContrib = originalAmountRounded;
 
     // Check if user already has a subscription
     final existingSubscription = await _supabase
@@ -236,39 +256,52 @@ class InvestmentService {
 
     if (existingSubscription != null) {
       // User already subscribed, add to existing amounts
-      final newTotalContrib = (existingSubscription['total_contrib'] as num).toDouble() + amount;
-      final newCurrentBalance = (existingSubscription['current_balance'] as num).toDouble() + amountAfterFee;
+      final newTotalContrib = (existingSubscription['total_contrib'] as num).toDouble() + amountForTotalContrib;
+      final newCurrentBalance = (existingSubscription['current_balance'] as num).toDouble() + amountForCurrentBalance;
+      
+      // Round to 2 decimal places before saving to database
+      final newTotalContribRounded = (newTotalContrib * 100).round() / 100.0;
+      final newCurrentBalanceRounded = (newCurrentBalance * 100).round() / 100.0;
 
       await _supabase
           .from('userinvestmentvehicle')
           .update({
-            'total_contrib': newTotalContrib,
-            'current_balance': newCurrentBalance,
+            'total_contrib': newTotalContribRounded,
+            'current_balance': newCurrentBalanceRounded,
           })
           .eq('id', existingSubscription['id']);
 
       return DepositResult(
         success: true,
-        totalContributions: newTotalContrib,
-        currentBalance: newCurrentBalance,
-        feeAmount: feeAmount,
+        totalContributions: newTotalContribRounded,
+        currentBalance: newCurrentBalanceRounded,
+        feeAmount: originalAmountRounded - amount, // Fee amount
         isNewSubscription: false,
       );
     } else {
       // Create new subscription
+      // Round to 2 decimal places before saving to database
+      final totalContribRounded = (amountForTotalContrib * 100).round() / 100.0;
+      final currentBalanceRounded = (amountForCurrentBalance * 100).round() / 100.0;
+      
+      // Use appliedDate if provided, otherwise use current date
+      final registeredAt = appliedDate != null 
+          ? appliedDate.toIso8601String().split('T')[0] 
+          : DateTime.now().toIso8601String().split('T')[0];
+      
       await _supabase.from('userinvestmentvehicle').insert({
         'user_uid': uid,
         'vehicle_id': vehicleId,
-        'registered_at': DateTime.now().toIso8601String(),
-        'total_contrib': amount,
-        'current_balance': amountAfterFee,
+        'registered_at': registeredAt,
+        'total_contrib': totalContribRounded,
+        'current_balance': currentBalanceRounded,
       });
 
       return DepositResult(
         success: true,
-        totalContributions: amount,
-        currentBalance: amountAfterFee,
-        feeAmount: feeAmount,
+        totalContributions: totalContribRounded,
+        currentBalance: currentBalanceRounded,
+        feeAmount: originalAmountRounded - amount, // Fee amount
         isNewSubscription: true,
       );
     }

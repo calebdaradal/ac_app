@@ -44,11 +44,14 @@ class TransactionService {
 
     print('[TransactionService] Creating transaction: type=$transactionTypeId, amount=$amount, status=$status, vehicleId=$vehicleId, refNumber=$refNumber');
 
+    // Round amount to 2 decimal places before saving to database
+    final amountRounded = (amount * 100).round() / 100.0;
+
     // Set default applied_at to today's date (admin will update this when approving)
     final data = {
       'user_uid': uid,
       'transaction_id': transactionTypeId,
-      'amount': amount,
+      'amount': amountRounded,
       'bank_detail': bankDetailId,
       'status': status,
       'vehicle_id': vehicleId, // Store vehicle_id in transaction
