@@ -149,7 +149,6 @@ class YieldService {
       }
       
       final eligibleBalance = eligibleBalances[userUid]!;
-      final currentTotalYield = (sub['total_yield'] as num?)?.toDouble() ?? 0.0;
 
       // Calculate yield based on type
       double grossYield;
@@ -185,25 +184,6 @@ class YieldService {
       // because eligible balance is just for calculation purposes
       final balanceAfter = currentBalance + netYield;
       
-      // Calculate yield percent using formula: ((current_balance - total_contrib) / total_contrib) * 100
-      // After yield is applied: new_balance = current_balance + net_yield
-      // So yield_percent = ((new_balance - total_contrib) / total_contrib) * 100
-      double yieldPercent;
-      if (totalContrib > 0) {
-        yieldPercent = ((balanceAfter - totalContrib) / totalContrib) * 100;
-      } else {
-        yieldPercent = 0.0;
-      }
-
-      // Update totals
-      // Accumulate total yield amount (sum of all yields earned)
-      final newTotalYield = currentTotalYield + netYield;
-      
-      // Calculate and store yield percent using formula: ((current_balance - total_contrib) / total_contrib) * 100
-      // This represents the current yield percentage after this yield is applied
-      // Use balanceAfter (which includes the new yield) and totalContrib
-      final newTotalYieldPercent = yieldPercent;
-
       print('[YieldService] User: $userUid');
       print('  Eligible Balance (for yield calc): ₱${eligibleBalance.toStringAsFixed(2)}');
       print('  Current Balance (before yield): ₱${currentBalance.toStringAsFixed(2)}');
@@ -224,13 +204,11 @@ class YieldService {
         'balance_after': balanceAfter,
       });
 
-      // Update user's balance and yield totals
+      // Update user's balance only (total_yield and total_yield_percent removed from schema)
       await _supabase
           .from('userinvestmentvehicle')
           .update({
             'current_balance': balanceAfter,
-            'total_yield': newTotalYield,
-            'total_yield_percent': newTotalYieldPercent,
           })
           .eq('id', subId);
 

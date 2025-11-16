@@ -24,7 +24,7 @@ class InvestmentService {
     // Fetch all subscriptions for this user
     final subscriptions = await _supabase
         .from('userinvestmentvehicle')
-        .select('id, user_uid, vehicle_id, total_contrib, current_balance, total_yield, total_yield_percent')
+        .select('id, user_uid, vehicle_id, total_contrib, current_balance')
         .eq('user_uid', uid);
 
     print('[InvestmentService] Query successful. Found ${subscriptions.length} subscriptions');
@@ -55,7 +55,7 @@ class InvestmentService {
         try {
           final authSubs = await _supabase
               .from('userinvestmentvehicle')
-              .select('id, user_uid, vehicle_id, total_contrib, current_balance, total_yield')
+              .select('id, user_uid, vehicle_id, total_contrib, current_balance')
               .eq('user_uid', authUser.id);
           print('[InvestmentService] Found ${authSubs.length} subscriptions for auth UID: ${authUser.id}');
         } catch (e) {
@@ -262,8 +262,6 @@ class InvestmentService {
         'registered_at': DateTime.now().toIso8601String(),
         'total_contrib': amount,
         'current_balance': amountAfterFee,
-        'total_yield': 0.0,
-        'total_yield_percent': 0.0,
       });
 
       return DepositResult(
@@ -317,37 +315,21 @@ class InvestmentService {
       final vehicleId = vehicle['id'] as int;
       print('[InvestmentService] ✅ Found vehicle: ${vehicle['vehicle_name']} (ID: $vehicleId)');
 
-      // Get user's subscription data
-      final subscription = await _supabase
-          .from('userinvestmentvehicle')
-          .select('total_yield, total_yield_percent')
-          .eq('user_uid', uid)
-          .eq('vehicle_id', vehicleId)
-          .maybeSingle();
-
-      print('[InvestmentService] Subscription data: $subscription');
-
       // Get latest yield distribution for this user and vehicle (using applied_date from yields)
+      // Order by applied_date descending to get most recent yield
       final latestYield = await _supabase
           .from('user_yield_distributions')
-          .select('gross_yield, balance_before, yield_id, yields!inner(applied_date)')
+          .select('gross_yield, balance_before, yield_id, yields!inner(applied_date, created_at)')
           .eq('user_uid', uid)
           .eq('vehicle_id', vehicleId)
+          .order('yields(applied_date)', ascending: false)
           .limit(1)
           .maybeSingle();
 
       print('[InvestmentService] Latest yield distribution: $latestYield');
 
-      double totalYield = 0.0;
       double latestYieldPercent = 0.0;
       DateTime? lastUpdated;
-
-      if (subscription != null) {
-        totalYield = (subscription['total_yield'] as num?)?.toDouble() ?? 0.0;
-        print('[InvestmentService] Total yield from subscription: $totalYield');
-      } else {
-        print('[InvestmentService] ⚠️ No subscription found for this vehicle');
-      }
 
       if (latestYield != null) {
         final grossYield = (latestYield['gross_yield'] as num).toDouble();
@@ -364,6 +346,22 @@ class InvestmentService {
       } else {
         print('[InvestmentService] ⚠️ No yield distributions found');
         print('[InvestmentService] 🔍 This could be an RLS issue - check if "Users can view their related yields" policy is applied');
+      }
+
+      // Calculate totalYield from current balance and total contributions
+      // Get subscription to calculate totalYield = currentBalance - totalContrib
+      final subscription = await _supabase
+          .from('userinvestmentvehicle')
+          .select('total_contrib, current_balance')
+          .eq('user_uid', uid)
+          .eq('vehicle_id', vehicleId)
+          .maybeSingle();
+      
+      double totalYield = 0.0;
+      if (subscription != null) {
+        final totalContrib = (subscription['total_contrib'] as num?)?.toDouble() ?? 0.0;
+        final currentBalance = (subscription['current_balance'] as num?)?.toDouble() ?? 0.0;
+        totalYield = currentBalance - totalContrib;
       }
 
       print('[InvestmentService] === Summary Result ===');

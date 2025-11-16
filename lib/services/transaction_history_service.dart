@@ -19,55 +19,14 @@ class TransactionHistoryService {
 
     try {
       // 1. Fetch user transactions (deposits and withdrawals)
-      // Try to get created_at if available, otherwise we'll use ID-based sorting
+      // Now using created_at from usertransactions table for accurate ordering
       final userTransactionsResponse = await _supabase
           .from('usertransactions')
-          .select('id, transaction_id, amount, status, applied_at')
+          .select('id, transaction_id, amount, status, applied_at, created_at')
           .eq('user_uid', uid)
           .eq('vehicle_id', vehicleId);
 
       print('[TransactionHistory] Found ${userTransactionsResponse.length} user transactions');
-
-      // First, get all yields to establish a reference point for transaction timing
-      // Also get yield IDs to compare with transaction IDs
-      final yieldDistributionsForRef = await _supabase
-          .from('user_yield_distributions')
-          .select('id, created_at')
-          .eq('user_uid', uid)
-          .eq('vehicle_id', vehicleId);
-      
-      DateTime? mostRecentYieldDate;
-      DateTime? oldestYieldDate;
-      int? maxYieldId;
-      int? minYieldId;
-      
-      if (yieldDistributionsForRef.isNotEmpty) {
-        for (var dist in yieldDistributionsForRef) {
-          if (dist['created_at'] != null) {
-            final createdAt = DateTime.parse(dist['created_at'] as String);
-            if (mostRecentYieldDate == null || createdAt.isAfter(mostRecentYieldDate)) {
-              mostRecentYieldDate = createdAt;
-            }
-            if (oldestYieldDate == null || createdAt.isBefore(oldestYieldDate)) {
-              oldestYieldDate = createdAt;
-            }
-          }
-          final yieldId = dist['id'] as int?;
-          if (yieldId != null) {
-            if (maxYieldId == null || yieldId > maxYieldId) maxYieldId = yieldId;
-            if (minYieldId == null || yieldId < minYieldId) minYieldId = yieldId;
-          }
-        }
-      }
-
-      // Find max and min transaction IDs for relative positioning
-      int maxTransactionId = 0;
-      int minTransactionId = 999999999;
-      for (var trans in userTransactionsResponse) {
-        final id = trans['id'] as int;
-        if (id > maxTransactionId) maxTransactionId = id;
-        if (id < minTransactionId) minTransactionId = id;
-      }
 
       for (var trans in userTransactionsResponse) {
         final transactionTypeId = trans['transaction_id'] as int;
@@ -75,6 +34,8 @@ class TransactionHistoryService {
         final amount = (trans['amount'] as num).toDouble();
         final appliedAt = DateTime.parse(trans['applied_at'] as String);
         final transactionId = trans['id'] as int;
+        // Get created_at for ordering (when transaction was actually created)
+        final createdAtStr = trans['created_at'] as String?;
 
         String type;
         String displayStatus;
@@ -105,58 +66,21 @@ class TransactionHistoryService {
           }
         }
 
-        // Estimate actionDate: Since usertransactions doesn't have created_at,
-        // we estimate based on transaction ID relative to yield IDs and timestamps.
-        // Key insight: Compare transaction IDs with yield IDs to determine relative creation order.
-        
-        DateTime estimatedActionDate;
-        
-        if (mostRecentYieldDate != null && oldestYieldDate != null && maxYieldId != null) {
-          // We have yield data - compare transaction ID with yield IDs to determine order
-          
-          // If transaction ID is LESS than the maximum yield ID, it was likely created BEFORE yields
-          // If transaction ID is GREATER than the maximum yield ID, it was likely created AFTER yields
-          
-          final maxYieldIdValue = maxYieldId; // Safe because we checked != null above
-          
-          if (transactionId < maxYieldIdValue) {
-            // Transaction was created BEFORE yields - position it before oldestYieldDate
-            // Use transaction ID relative to minTransactionId to position it
-            final idRange = maxYieldIdValue - minTransactionId;
-            if (idRange > 0) {
-              final idPosition = (transactionId - minTransactionId) / idRange;
-              // Position before oldestYieldDate, going back up to 30 days
-              final daysBeforeOldest = ((1.0 - idPosition) * 30).toInt();
-              estimatedActionDate = oldestYieldDate.subtract(Duration(days: daysBeforeOldest));
-            } else {
-              estimatedActionDate = oldestYieldDate.subtract(const Duration(days: 1));
-            }
-          } else {
-            // Transaction was created AFTER yields - position it after mostRecentYieldDate
-            // Use transaction ID relative to maxYieldId to determine how much after
-            final idRange = maxTransactionId - maxYieldIdValue;
-            if (idRange > 0) {
-              final idPosition = (transactionId - maxYieldIdValue) / idRange;
-              // Position after mostRecentYieldDate, extending forward up to 7 days
-              final daysAfterRecent = (idPosition * 7).toInt();
-              estimatedActionDate = mostRecentYieldDate.add(Duration(days: daysAfterRecent + 1));
-            } else {
-              estimatedActionDate = mostRecentYieldDate.add(const Duration(days: 1));
-            }
+        // Use created_at for actionDate (when transaction was actually created)
+        // Fallback to applied_at if created_at is null (shouldn't happen with default now())
+        DateTime actionDate;
+        if (createdAtStr != null && createdAtStr.isNotEmpty) {
+          try {
+            actionDate = DateTime.parse(createdAtStr);
+          } catch (e) {
+            print('[TransactionHistory] Error parsing created_at for transaction $transactionId: $e');
+            // Fallback to applied_at if parsing fails
+            actionDate = appliedAt;
           }
         } else {
-          // No yields yet - use current time as reference
-          final idRange = maxTransactionId - minTransactionId;
-          final idPosition = idRange > 0 
-              ? (transactionId - minTransactionId) / idRange 
-              : 1.0;
-          
-          // Position relative to current time (last 90 days)
-          final daysAgo = ((1.0 - idPosition) * 90).toInt();
-          estimatedActionDate = DateTime.now().subtract(Duration(days: daysAgo));
+          // Fallback to applied_at if created_at is null
+          actionDate = appliedAt;
         }
-        
-        final finalActionDate = estimatedActionDate;
 
         allTransactions.add(TransactionHistoryItem(
           id: transactionId,
@@ -165,15 +89,16 @@ class TransactionHistoryService {
           yieldPercent: null,
           status: displayStatus,
           date: appliedAt,
-          actionDate: finalActionDate,
+          actionDate: actionDate,
           isPositive: type == 'Deposit',
         ));
       }
 
-      // 2. Fetch yield distributions with applied_date from yields table and created_at from user_yield_distributions
+      // 2. Fetch yield distributions with applied_date and created_at from yields table
+      // Use created_at from yields table (when admin created the yield) for ordering
       final yieldDistributions = await _supabase
           .from('user_yield_distributions')
-          .select('id, net_yield, gross_yield, balance_before, yield_id, created_at, yields!inner(yield_type, yield_amount, applied_date)')
+          .select('id, net_yield, gross_yield, balance_before, yield_id, yields!inner(yield_type, yield_amount, applied_date, created_at)')
           .eq('user_uid', uid)
           .eq('vehicle_id', vehicleId);
 
@@ -183,14 +108,24 @@ class TransactionHistoryService {
         final netYield = (yieldDist['net_yield'] as num).toDouble();
         final grossYield = (yieldDist['gross_yield'] as num).toDouble();
         final balanceBefore = (yieldDist['balance_before'] as num).toDouble();
-        // Get applied_date from nested yields object
+        // Get applied_date and created_at from nested yields object
         final yieldsData = yieldDist['yields'] as Map<String, dynamic>;
         final appliedDate = DateTime.parse(yieldsData['applied_date'] as String);
-        // Use created_at from user_yield_distributions (when the yield was distributed to this user) for ordering
-        final createdAtStr = yieldDist['created_at'] as String?;
-        final actionDate = createdAtStr != null 
-            ? DateTime.parse(createdAtStr)
-            : appliedDate; // Fallback to applied_date if created_at is not available
+        // Use created_at from yields table (when admin created/applied the yield) for ordering
+        final createdAtStr = yieldsData['created_at'] as String?;
+        DateTime actionDate;
+        if (createdAtStr != null && createdAtStr.isNotEmpty) {
+          try {
+            actionDate = DateTime.parse(createdAtStr);
+          } catch (e) {
+            print('[TransactionHistory] Error parsing created_at for yield: $e');
+            // Fallback to applied_date if parsing fails
+            actionDate = appliedDate;
+          }
+        } else {
+          // Fallback to applied_date if created_at is null
+          actionDate = appliedDate;
+        }
         
         // Calculate yield percentage: (gross_yield / balance_before) * 100
         double yieldPercent = 0.0;
