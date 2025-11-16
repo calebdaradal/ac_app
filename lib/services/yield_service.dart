@@ -47,7 +47,7 @@ class YieldService {
     // 1. Fetch all users subscribed to this vehicle
     final subscriptions = await _supabase
         .from('userinvestmentvehicle')
-        .select('id, user_uid, current_balance, total_yield, total_yield_percent')
+        .select('id, user_uid, current_balance')
         .eq('vehicle_id', vehicleId);
 
     if (subscriptions.isEmpty) {
@@ -175,9 +175,8 @@ class YieldService {
       // For positive yields: netYield = grossYield - (positive fee) = grossYield - fee (less positive)
       final netYield = grossYield - performanceFee;
 
-      // Get current balance and total contrib to calculate yield percent
+      // Get current balance
       final currentBalance = (sub['current_balance'] as num).toDouble();
-      final totalContrib = (sub['total_contrib'] as num?)?.toDouble() ?? 0.0;
       
       // Calculate new balance: Current Balance + Net Yield
       // Note: We add yield to current balance, not eligible balance
