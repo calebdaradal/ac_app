@@ -144,13 +144,11 @@ class _AdminScreenState extends State<AdminScreen> {
         final newBalance = currentBalance - transaction.amount!;
         
         // Set total_contrib to equal new balance
-        // Keep total_yield and total_yield_percent unchanged (only updated when admin applies yield)
         await supabase
             .from('userinvestmentvehicle')
             .update({
               'current_balance': newBalance,
               'total_contrib': newBalance, // Inherit from current_balance
-              // total_yield and total_yield_percent remain unchanged
             })
             .eq('id', userVehicle['id']);
 
@@ -473,12 +471,15 @@ class _AdminScreenState extends State<AdminScreen> {
     }
 
     await showDialog(
+      
       context: context,
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
               title: Row(
                 children: [
                   Icon(Icons.percent_rounded, color: AppColors.primaryColor),
@@ -730,6 +731,8 @@ class _AdminScreenState extends State<AdminScreen> {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
+                        backgroundColor: Colors.white,
+                        surfaceTintColor: Colors.transparent,
                         title: const TitleText('Confirm Yield Application', fontSize: 18),
                         content: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -800,6 +803,8 @@ class _AdminScreenState extends State<AdminScreen> {
                         showDialog(
                           context: context,
                           builder: (ctx) => AlertDialog(
+                            backgroundColor: Colors.white,
+                            surfaceTintColor: Colors.transparent,
                             title: Row(
                               children: [
                                 Icon(Icons.check_circle, color: Colors.green, size: 32),

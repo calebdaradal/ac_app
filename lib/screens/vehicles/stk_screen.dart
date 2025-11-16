@@ -12,6 +12,14 @@ import 'package:flutter_svg/svg.dart';
 
 const _pageIdentifier = 'SP';
 
+enum TransactionFilter {
+  removeFilters, // Reset to default
+  dateAscending,
+  dateDescending,
+  yield,
+  transactions,
+  allPending,
+}
 
 class StkScreen extends StatefulWidget {
   static const routeName = '/stkscreen';
@@ -25,7 +33,9 @@ class _StkScreenState extends State<StkScreen> {
   UserVehicleSubscription? _subscription;
   bool _loading = true;
   List<TransactionHistoryItem> _recentTransactions = [];
-  List<TransactionHistoryItem> _allTransactions = [];
+  List<TransactionHistoryItem> _allTransactions = []; // Keep all transactions for filtering
+  List<TransactionHistoryItem> _filteredTransactions = []; // Filtered list shown to user
+  TransactionFilter _currentFilter = TransactionFilter.dateDescending; // Default filter
   bool _loadingTransactions = false;
 
   @override
@@ -71,7 +81,12 @@ class _StkScreenState extends State<StkScreen> {
       if (mounted) {
         setState(() {
           _allTransactions = transactions;
-          _recentTransactions = transactions.take(3).toList(); // Show last 3
+          if (_allTransactions.isNotEmpty) {
+            _applyFilter();
+          } else {
+            _filteredTransactions = [];
+            _recentTransactions = [];
+          }
           _loadingTransactions = false;
         });
       }
@@ -81,6 +96,73 @@ class _StkScreenState extends State<StkScreen> {
         setState(() => _loadingTransactions = false);
       }
     }
+  }
+
+  void _applyFilter() {
+    List<TransactionHistoryItem> filtered = List.from(_allTransactions);
+
+    switch (_currentFilter) {
+      case TransactionFilter.removeFilters:
+        // Reset to default filter (Date: Descending)
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        filtered = filtered.where((trans) {
+          final appliedDate = trans.date;
+          final appliedDateOnly = DateTime(appliedDate.year, appliedDate.month, appliedDate.day);
+          return appliedDateOnly.isBefore(today) || appliedDateOnly.isAtSameMomentAs(today);
+        }).toList();
+        filtered.sort((a, b) => b.date.compareTo(a.date)); // Descending
+        break;
+
+      case TransactionFilter.dateAscending:
+        // Filter by applied_at date (only applied transactions) and sort ascending
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        filtered = filtered.where((trans) {
+          final appliedDate = trans.date;
+          final appliedDateOnly = DateTime(appliedDate.year, appliedDate.month, appliedDate.day);
+          return appliedDateOnly.isBefore(today) || appliedDateOnly.isAtSameMomentAs(today);
+        }).toList();
+        filtered.sort((a, b) => a.date.compareTo(b.date)); // Ascending
+        break;
+
+      case TransactionFilter.dateDescending:
+        // Filter by applied_at date (only applied transactions) and sort descending
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        filtered = filtered.where((trans) {
+          final appliedDate = trans.date;
+          final appliedDateOnly = DateTime(appliedDate.year, appliedDate.month, appliedDate.day);
+          return appliedDateOnly.isBefore(today) || appliedDateOnly.isAtSameMomentAs(today);
+        }).toList();
+        filtered.sort((a, b) => b.date.compareTo(a.date)); // Descending
+        break;
+
+      case TransactionFilter.yield:
+        // Show only Yield transactions
+        filtered = filtered.where((trans) => trans.type == 'Yield').toList();
+        filtered.sort((a, b) => b.date.compareTo(a.date)); // Most recent first
+        break;
+
+      case TransactionFilter.transactions:
+        // Show only Deposits and Withdrawals (exclude Yields)
+        filtered = filtered.where((trans) => trans.type == 'Deposit' || trans.type == 'Withdrawal').toList();
+        filtered.sort((a, b) => b.date.compareTo(a.date)); // Most recent first
+        break;
+
+      case TransactionFilter.allPending:
+        // Show only pending/verifying transactions
+        filtered = filtered.where((trans) => trans.status == 'Verifying' || trans.status == 'PENDING').toList();
+        filtered.sort((a, b) => b.date.compareTo(a.date)); // Most recent first
+        break;
+    }
+
+    setState(() {
+      _filteredTransactions = filtered;
+      _recentTransactions = _filteredTransactions.isNotEmpty 
+          ? _filteredTransactions.take(3).toList()
+          : [];
+    });
   }
 
   Future<void> _refreshData() async {
@@ -210,27 +292,263 @@ class _StkScreenState extends State<StkScreen> {
       useSafeArea: true, // keep above status bar/notch
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.92,
-          minChildSize: 0.6,
-          maxChildSize: 1.0,
-          builder: (_, scrollController) {
-            return SafeArea(
-              top: true,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    Container(width: 44, height: 4, decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(2))),
-                    const SizedBox(height: 12),
-                    const Text('All Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        return StatefulBuilder(
+          builder: (BuildContext sheetContext, StateSetter setSheetState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.92,
+              minChildSize: 0.6,
+              maxChildSize: 1.0,
+              builder: (_, scrollController) {
+                return SafeArea(
+                  top: true,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        Container(width: 44, height: 4, decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(height: 12),
+
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              const Text(
+                                'All Transactions',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: PopupMenuButton<TransactionFilter>(
+                                  color: Colors.white,
+                                  icon: Icon(Icons.filter_list_rounded),
+                                  onSelected: (TransactionFilter filter) {
+                                    setState(() {
+                                      _currentFilter = filter;
+                                    });
+                                    _applyFilter();
+                                    // Rebuild the sheet content
+                                    setSheetState(() {});
+                                  },
+                              itemBuilder: (BuildContext context) => [
+                                PopupMenuItem<TransactionFilter>(
+                                  value: TransactionFilter.removeFilters,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.clear_all,
+                                        size: 20,
+                                        color: _currentFilter == TransactionFilter.removeFilters
+                                            ? AppColors.tertiaryColor
+                                            : Colors.grey.shade700,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Remove Filters',
+                                        style: TextStyle(
+                                          color: _currentFilter == TransactionFilter.removeFilters
+                                              ? AppColors.tertiaryColor
+                                              : Colors.grey.shade800,
+                                          fontWeight: _currentFilter == TransactionFilter.removeFilters
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (_currentFilter == TransactionFilter.removeFilters)
+                                        const Spacer(),
+                                      if (_currentFilter == TransactionFilter.removeFilters)
+                                        Icon(
+                                          Icons.check,
+                                          color: AppColors.tertiaryColor,
+                                          size: 20,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                                PopupMenuItem<TransactionFilter>(
+                                  value: TransactionFilter.dateAscending,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.arrow_upward,
+                                        size: 20,
+                                        color: _currentFilter == TransactionFilter.dateAscending
+                                            ? AppColors.tertiaryColor
+                                            : Colors.grey.shade700,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Date: Ascending',
+                                        style: TextStyle(
+                                          color: _currentFilter == TransactionFilter.dateAscending
+                                              ? AppColors.tertiaryColor
+                                              : Colors.grey.shade800,
+                                          fontWeight: _currentFilter == TransactionFilter.dateAscending
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (_currentFilter == TransactionFilter.dateAscending)
+                                        const Spacer(),
+                                      if (_currentFilter == TransactionFilter.dateAscending)
+                                        Icon(
+                                          Icons.check,
+                                          color: AppColors.tertiaryColor,
+                                          size: 20,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem<TransactionFilter>(
+                                  value: TransactionFilter.dateDescending,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.arrow_downward,
+                                        size: 20,
+                                        color: _currentFilter == TransactionFilter.dateDescending
+                                            ? AppColors.tertiaryColor
+                                            : Colors.grey.shade700,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Date: Descending',
+                                        style: TextStyle(
+                                          color: _currentFilter == TransactionFilter.dateDescending
+                                              ? AppColors.tertiaryColor
+                                              : Colors.grey.shade800,
+                                          fontWeight: _currentFilter == TransactionFilter.dateDescending
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (_currentFilter == TransactionFilter.dateDescending)
+                                        const Spacer(),
+                                      if (_currentFilter == TransactionFilter.dateDescending)
+                                        Icon(
+                                          Icons.check,
+                                          color: AppColors.tertiaryColor,
+                                          size: 20,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem<TransactionFilter>(
+                                  value: TransactionFilter.yield,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.trending_up,
+                                        size: 20,
+                                        color: _currentFilter == TransactionFilter.yield
+                                            ? AppColors.tertiaryColor
+                                            : Colors.grey.shade700,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Yield',
+                                        style: TextStyle(
+                                          color: _currentFilter == TransactionFilter.yield
+                                              ? AppColors.tertiaryColor
+                                              : Colors.grey.shade800,
+                                          fontWeight: _currentFilter == TransactionFilter.yield
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (_currentFilter == TransactionFilter.yield)
+                                        const Spacer(),
+                                      if (_currentFilter == TransactionFilter.yield)
+                                        Icon(
+                                          Icons.check,
+                                          color: AppColors.tertiaryColor,
+                                          size: 20,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem<TransactionFilter>(
+                                  value: TransactionFilter.transactions,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.swap_horiz,
+                                        size: 20,
+                                        color: _currentFilter == TransactionFilter.transactions
+                                            ? AppColors.tertiaryColor
+                                            : Colors.grey.shade700,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Transactions',
+                                        style: TextStyle(
+                                          color: _currentFilter == TransactionFilter.transactions
+                                              ? AppColors.tertiaryColor
+                                              : Colors.grey.shade800,
+                                          fontWeight: _currentFilter == TransactionFilter.transactions
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (_currentFilter == TransactionFilter.transactions)
+                                        const Spacer(),
+                                      if (_currentFilter == TransactionFilter.transactions)
+                                        Icon(
+                                          Icons.check,
+                                          color: AppColors.tertiaryColor,
+                                          size: 20,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem<TransactionFilter>(
+                                  value: TransactionFilter.allPending,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.pending,
+                                        size: 20,
+                                        color: _currentFilter == TransactionFilter.allPending
+                                            ? AppColors.tertiaryColor
+                                            : Colors.grey.shade700,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'All Pending',
+                                        style: TextStyle(
+                                          color: _currentFilter == TransactionFilter.allPending
+                                              ? AppColors.tertiaryColor
+                                              : Colors.grey.shade800,
+                                          fontWeight: _currentFilter == TransactionFilter.allPending
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (_currentFilter == TransactionFilter.allPending)
+                                        const Spacer(),
+                                      if (_currentFilter == TransactionFilter.allPending)
+                                        Icon(
+                                          Icons.check,
+                                          color: AppColors.tertiaryColor,
+                                          size: 20,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Expanded(
-                      child: _allTransactions.isEmpty
+                      child: (_filteredTransactions.isEmpty || _filteredTransactions.length == 0 || _allTransactions.isEmpty)
                           ? Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -248,9 +566,10 @@ class _StkScreenState extends State<StkScreen> {
                           : ListView.builder(
                               controller: scrollController,
                               padding: const EdgeInsets.symmetric(horizontal: 16),
-                              itemCount: _allTransactions.length,
+                              itemCount: _filteredTransactions.length,
                               itemBuilder: (_, i) {
-                                final trans = _allTransactions[i];
+                                if (i >= _filteredTransactions.length) return const SizedBox.shrink();
+                                final trans = _filteredTransactions[i];
                                 return TransactionCard(
                                   date: trans.displayDate,
                                   amount: trans.amount,
@@ -266,6 +585,8 @@ class _StkScreenState extends State<StkScreen> {
                   ],
                 ),
               ),
+            );
+              },
             );
           },
         );

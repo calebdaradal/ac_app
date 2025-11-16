@@ -171,13 +171,11 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
         final newBalance = currentBalance - transaction.amount!;
         
         // Set total_contrib to equal new balance
-        // Keep total_yield and total_yield_percent unchanged (only updated when admin applies yield)
         await supabase
             .from('userinvestmentvehicle')
             .update({
               'current_balance': newBalance,
               'total_contrib': newBalance, // Inherit from current_balance
-              // total_yield and total_yield_percent remain unchanged
             })
             .eq('id', userVehicle['id']);
 
