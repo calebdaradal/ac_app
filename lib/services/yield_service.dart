@@ -215,7 +215,26 @@ class YieldService {
     }
 
     // 5. Batch insert distribution records
-    await _supabase.from('user_yield_distributions').insert(distributions);
+    if (distributions.isEmpty) {
+      print('[YieldService] ⚠️ WARNING: No distributions to insert (no users with eligible balance)');
+    } else {
+      try {
+        final insertResponse = await _supabase
+            .from('user_yield_distributions')
+            .insert(distributions)
+            .select();
+        
+        print('[YieldService] ✅ Successfully inserted ${insertResponse.length} distribution records');
+        
+        // Verify the insert
+        if (insertResponse.length != distributions.length) {
+          print('[YieldService] ⚠️ WARNING: Inserted ${insertResponse.length} but expected ${distributions.length}');
+        }
+      } catch (e) {
+        print('[YieldService] ❌ ERROR inserting distributions: $e');
+        rethrow; // Re-throw to fail the yield application
+      }
+    }
 
     print('[YieldService] Successfully processed $usersProcessed users');
 

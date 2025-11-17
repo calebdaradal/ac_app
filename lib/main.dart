@@ -19,7 +19,7 @@ import 'screens/create_user_screen.dart';
 import 'screens/manage_banks_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/verify_current_pin_screen.dart';
-import 'shared/styled_button.dart';
+import 'services/notification_service.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -30,15 +30,38 @@ Future<void> main() async {
     url: dotenv.env['SUPABASE_URL'] ?? 'https://YOUR-PROJECT-REF.supabase.co',
     anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? 'YOUR-ANON-KEY',
   );
+  
+  // Initialize OneSignal notifications (non-blocking)
+  // This will only work if ONESIGNAL_APP_ID is set in .env
+  NotificationService().initialize().catchError((error) {
+    print('[main] Failed to initialize notifications: $error');
+    // Continue app startup even if notifications fail
+  });
+  
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    // Set navigator key for notification navigation
+    NotificationService().setNavigatorKey(_navigatorKey);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Ascendo Capital',
       debugShowCheckedModeBanner: false,
       theme: primaryTheme,

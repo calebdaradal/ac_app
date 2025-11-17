@@ -2,8 +2,10 @@ import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/theme.dart';
 import 'package:flutter/material.dart';
 
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 import '../services/pin_storage.dart';
 import '../services/user_profile_service.dart';
+import '../services/notification_service.dart';
 import 'home_screen.dart';
 import '../shared/numeric_keypad.dart';
 
@@ -73,6 +75,17 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
           final uid = profileService.profile?.uid;
           if (uid != null) {
             await PinStorage.saveUid(uid);
+          }
+          
+          // Store device token for push notifications
+          try {
+            final deviceState = await OneSignal.User.pushSubscription.id;
+            if (deviceState != null) {
+              await NotificationService().storeDeviceToken(deviceState);
+            }
+          } catch (e) {
+            print('[PinUnlock] Error storing device token: $e');
+            // Don't show error to user - notifications are optional
           }
         } catch (e) {
           if (mounted) {

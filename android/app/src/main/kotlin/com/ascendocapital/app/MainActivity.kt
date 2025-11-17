@@ -1,5 +1,6 @@
-package com.example.ac_app
+package com.ascendocapital.app
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+
