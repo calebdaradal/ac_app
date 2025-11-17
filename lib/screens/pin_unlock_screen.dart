@@ -100,36 +100,38 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(backgroundColor: Colors.white,),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-    
-          Image.asset('assets/img/logo/OrangeLeaf.png'),
-    
-          const SizedBox(height: 30),
-    
-          TitleText('Enter your PIN', fontSize: 30, color: AppColors.titleColor),
-    
-          const SizedBox(height: 30,),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(4, (i) => _Dot(filled: i < _pin.length)),
-          ),
-          const SizedBox(height: 8),
-          if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: NumericKeypad(
-              onTap: _tap,
-              diameter: 89,
-              spacing: 16,
+      body: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            
+            Image.asset('assets/img/logo/OrangeLeaf.png'),
+            
+            const SizedBox(height: 30),
+            
+            TitleText('Enter your PIN', fontSize: 30, color: AppColors.titleColor),
+            
+            const SizedBox(height: 30,),
+            
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(4, (i) => _Dot(filled: i < _pin.length)),
             ),
-          ),
-    
-          const SizedBox(height: 50,),
-        ],
+            const SizedBox(height: 8),
+            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: NumericKeypad(
+                onTap: _tap,
+                diameter: 89,
+                spacing: 16,
+              ),
+            ),
+            
+            const SizedBox(height: 50,),
+          ],
+        ),
       ),
     );
   }

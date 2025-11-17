@@ -39,7 +39,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AC App',
+      title: 'Ascendo Capital',
       debugShowCheckedModeBanner: false,
       theme: primaryTheme,
       // initialRoute: WelcomeScreen.routeName,

@@ -17,6 +17,6 @@ ThemeData primaryTheme = ThemeData(
     seedColor: AppColors.primaryColor,
   ),
 
-  textTheme: GoogleFonts.getTextTheme('Afacad'),
+  textTheme: GoogleFonts.rubikTextTheme(),
   
 );

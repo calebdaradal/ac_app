@@ -123,12 +123,15 @@ class _DigitFieldState extends State<DigitField> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // PHP currency symbol - always visible, never deleted
+          // Use system font for peso symbol (better support than Rubik)
           Text(
             '₱',
             style: TextStyle(
               fontSize: 48,
               fontWeight: FontWeight.bold,
               color: AppColors.titleColor,
+              fontFamily: '.SF Pro Text', // iOS system font
+              fontFamilyFallback: ['Roboto', 'Arial', 'sans-serif'], // Fallbacks
             ),
           ),
           // Amount input field

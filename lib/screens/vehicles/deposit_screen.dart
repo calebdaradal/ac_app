@@ -122,10 +122,13 @@ class _DepositFundsState extends State<DepositFunds> {
     setState(() => _isSubmitting = true);
 
     try {
-      final amount = double.parse(_amountController.text.trim());
-      if (amount <= 0) {
+      // Parse amount from controller (remove commas from formatted value)
+      final amountText = _amountController.text.replaceAll(',', '');
+      final amount = double.tryParse(amountText);
+      
+      if (amount == null || amount <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Amount must be greater than zero')),
+          const SnackBar(content: Text('Please enter a valid amount')),
         );
         setState(() => _isSubmitting = false);
         return;
@@ -179,243 +182,195 @@ class _DepositFundsState extends State<DepositFunds> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        surfaceTintColor: Colors.transparent,
         backgroundColor: Colors.white,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: AppColors.titleColor),
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const TitleText('Deposit Funds', fontSize: 24),
-                  const SizedBox(height: 24),
-                  
-                  // Step 1: Transfer Funds
-                  _buildStepHeader(
-                    stepNumber: '1',
-                    title: 'Transfer Funds',
-                    description: 'Transfer funds using the bank details provided. Select the appropriate bank details based on your location (UK or PH). Note that we will need a reference number/transaction ID. (see next step)',
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  if (_adminBankDetails.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.account_balance, size: 48, color: Colors.grey.shade400),
-                            const SizedBox(height: 12),
-                            const SecondaryText(
-                              'No bank details available',
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    ..._adminBankDetails.map((detail) => _buildBankCard(detail)).toList(),
-                  
-                  const SizedBox(height: 32),
-                  
-                  // Step 2: Request Verification
-                  _buildStepHeader(
-                    stepNumber: '2',
-                    title: 'Request Verification',
-                    description: 'Fill out deposit form to request verification of deposit. If request is within UK working hours, this should not take more than an hour. You can track your deposit verification status in your dashboard.',
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // User's Bank Details
-                  if (_userBankDetails.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange.shade700),
-                          const SizedBox(height: 12),
-                          const SecondaryText(
-                            'No bank details found',
-                            fontSize: 16,
-                            color: Colors.black87,
-                          ),
-                          const SizedBox(height: 8),
-                          const SecondaryText(
-                            'Please add your bank details in Profile before making a deposit.',
-                            fontSize: 13,
-                            color: Colors.black54,
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const SecondaryText('Your Bank Details', fontSize: 14, color: Colors.black87),
-                            const Spacer(),
-                            if (_userBankDetails.length > 1)
-                              PopupMenuButton<BankDetails>(
-                                onSelected: (detail) {
-                                  setState(() {
-                                    _selectedUserBankDetail = detail;
-                                  });
-                                },
-                                itemBuilder: (context) {
-                                  return _userBankDetails.map((detail) {
-                                    return PopupMenuItem<BankDetails>(
-                                      value: detail,
-                                      child: Row(
-                                        children: [
-                                          Text(_getFlagEmoji(detail.location)),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              detail.bankName,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          if (detail.id == _selectedUserBankDetail?.id)
-                                            Icon(Icons.check, color: AppColors.primaryColor, size: 20),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList();
-                                },
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SecondaryText(
-                                      'Change',
-                                      fontSize: 13,
-                                      color: AppColors.primaryColor,
-                                    ),
-                                    Icon(Icons.arrow_drop_down, color: AppColors.primaryColor, size: 20),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        _buildUserBankCard(_selectedUserBankDetail!),
-                      ],
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const TitleText('Deposit Funds', fontSize: 24),
+                    const SizedBox(height: 24),
+                    
+                    // Step 1: Transfer Funds
+                    _buildStepHeader(
+                      stepNumber: '1',
+                      title: 'Transfer Funds',
+                      description: 'Transfer funds using the bank details provided. Select the appropriate bank details based on your location (UK or PH). Note that we will need a reference number/transaction ID. (see next step)',
                     ),
-                  const SizedBox(height: 24),
-                  
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        
-                        const SecondaryText('Amount Deposited', fontSize: 14),
-                        const SizedBox(height: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color.fromRGBO(247, 249, 252, 1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
+                    const SizedBox(height: 16),
+                    
+                    if (_adminBankDetails.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Column(
                             children: [
-                              Padding(
-                                padding: const EdgeInsets.only(left: 16),
-                                child: Text(
-                                  '₱',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.titleColor,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                
-                                child: TextField(
-                                  controller: _amountController,
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                                  ],
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: AppColors.titleColor,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Enter amount',
-                                    hintStyle: TextStyle(
-                                      color: AppColors.titleColor.withOpacity(0.5),
-                                    ),
-                                    filled: true,
-                                    fillColor: const Color.fromRGBO(247, 249, 252, 1),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    // enabledBorder: OutlineInputBorder(
-                                    //   borderRadius: BorderRadius.circular(12),
-                                    //   borderSide: BorderSide.none,
-                                    // ),
-                                    // focusedBorder: OutlineInputBorder(
-                                    //   borderRadius: BorderRadius.circular(12),
-                                    //   borderSide: BorderSide(color: AppColors.primaryColor, width: 2),
-                                    // ),
-                                    contentPadding: const EdgeInsets.only(right: 16, top: 16, bottom: 16, left: 5),
-                                  ),
-                                ),
+                              Icon(Icons.account_balance, size: 48, color: Colors.grey.shade400),
+                              const SizedBox(height: 12),
+                              const SecondaryText(
+                                'No bank details available',
+                                fontSize: 14,
+                                color: Colors.grey,
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        
-                        const SecondaryText('Reference Number *', fontSize: 14),
-                        const SizedBox(height: 8),
-                        StyledTextfield(
-                          controller: _refNumberController,
-                          keyboardType: TextInputType.number,
-                          label: 'Enter reference/transaction number',
-                        ),
-                        const SizedBox(height: 8),
-                        const SecondaryText(
-                          '* This is the reference number from your bank transfer',
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 24),
-                        
-                        SizedBox(
-                          width: double.infinity,
-                          child: StyledButton(
-                            onPressed: _isSubmitting ? null : _submitDeposit,
-                            child: Text(_isSubmitting ? 'Submitting...' : 'Submit Deposit Request'),
-                          ),
-                        ),
-                      ],
+                      )
+                    else
+                      ..._adminBankDetails.map((detail) => _buildBankCard(detail)).toList(),
+                    
+                    const SizedBox(height: 32),
+                    
+                    // Step 2: Request Verification
+                    _buildStepHeader(
+                      stepNumber: '2',
+                      title: 'Request Verification',
+                      description: 'Fill out deposit form to request verification of deposit. If request is within UK working hours, this should not take more than an hour. You can track your deposit verification status in your dashboard.',
                     ),
-                  ),
-                  
-                  const SizedBox(height: 32),
-                ],
+                    const SizedBox(height: 16),
+                    
+                    // User's Bank Details
+                    if (_userBankDetails.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange.shade700),
+                            const SizedBox(height: 12),
+                            const SecondaryText(
+                              'No bank details found',
+                              fontSize: 16,
+                              color: Colors.black87,
+                            ),
+                            const SizedBox(height: 8),
+                            const SecondaryText(
+                              'Please add your bank details in Profile before making a deposit.',
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const SecondaryText('Your Bank Details', fontSize: 14, color: Colors.black87),
+                              const Spacer(),
+                              if (_userBankDetails.length > 1)
+                                PopupMenuButton<BankDetails>(
+                                  onSelected: (detail) {
+                                    setState(() {
+                                      _selectedUserBankDetail = detail;
+                                    });
+                                  },
+                                  itemBuilder: (context) {
+                                    return _userBankDetails.map((detail) {
+                                      return PopupMenuItem<BankDetails>(
+                                        value: detail,
+                                        child: Row(
+                                          children: [
+                                            Text(_getFlagEmoji(detail.location)),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                detail.bankName,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            if (detail.id == _selectedUserBankDetail?.id)
+                                              Icon(Icons.check, color: AppColors.primaryColor, size: 20),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList();
+                                  },
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SecondaryText(
+                                        'Change',
+                                        fontSize: 13,
+                                        color: AppColors.primaryColor,
+                                      ),
+                                      Icon(Icons.arrow_drop_down, color: AppColors.primaryColor, size: 20),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _buildUserBankCard(_selectedUserBankDetail!),
+                        ],
+                      ),
+                    const SizedBox(height: 24),
+                    
+                    Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          
+                          const SecondaryText('Amount Deposited', fontSize: 14),
+                          const SizedBox(height: 8),
+                          DigitField(
+                            controller: _amountController,
+                            keyboardType: TextInputType.number,
+                            label: 'Amount',
+                          ),
+                          const SizedBox(height: 16),
+                          
+                          const SecondaryText('Reference Number *', fontSize: 14),
+                          const SizedBox(height: 8),
+                          StyledTextfield(
+                            controller: _refNumberController,
+                            keyboardType: TextInputType.number,
+                            label: 'Enter reference/transaction number',
+                          ),
+                          const SizedBox(height: 8),
+                          const SecondaryText(
+                            '* This is the reference number from your bank transfer',
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          SizedBox(
+                            width: double.infinity,
+                            child: StyledButton(
+                              onPressed: _isSubmitting ? null : _submitDeposit,
+                              child: Text(_isSubmitting ? 'Submitting...' : 'Submit Deposit Request'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 
@@ -502,28 +457,24 @@ class _DepositFundsState extends State<DepositFunds> {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 20),
-                  onPressed: () {
-                    final text = '''
-Bank: ${detail.bankName}
-Account Name: ${detail.accountName}
-Account Number: ${detail.accountNumber}${detail.location == 'UK' && detail.shortCode != null ? '\nShort Code: ${detail.shortCode}' : ''}
-''';
-                    Clipboard.setData(ClipboardData(text: text));
-                    showSuccessDialog(context, 'Bank details copied to clipboard');
-                  },
-                  tooltip: 'Copy details',
-                ),
               ],
             ),
             const Divider(height: 24),
-            _buildDetailRow('Account Name', detail.accountName),
+            _buildDetailRow('Account Name', detail.accountName, () {
+              Clipboard.setData(ClipboardData(text: detail.accountName));
+              showSuccessDialog(context, 'Account Name copied to clipboard');
+            }),
             const SizedBox(height: 8),
-            _buildDetailRow('Account Number', detail.accountNumber),
+            _buildDetailRow('Account Number', detail.accountNumber, () {
+              Clipboard.setData(ClipboardData(text: detail.accountNumber));
+              showSuccessDialog(context, 'Account Number copied to clipboard');
+            }),
             if (detail.location == 'UK' && detail.shortCode != null) ...[
               const SizedBox(height: 8),
-              _buildDetailRow('Short Code', detail.shortCode!),
+              _buildDetailRow('Short Code', detail.shortCode!, () {
+                Clipboard.setData(ClipboardData(text: detail.shortCode!));
+                showSuccessDialog(context, 'Short Code copied to clipboard');
+              }),
             ],
           ],
         ),
@@ -556,12 +507,21 @@ Account Number: ${detail.accountNumber}${detail.location == 'UK' && detail.short
               ],
             ),
             const Divider(height: 24),
-            _buildDetailRow('Account Name', detail.accountName),
+            _buildDetailRow('Account Name', detail.accountName, () {
+              Clipboard.setData(ClipboardData(text: detail.accountName));
+              showSuccessDialog(context, 'Account Name copied to clipboard');
+            }),
             const SizedBox(height: 8),
-            _buildDetailRow('Account Number', detail.accountNumber),
+            _buildDetailRow('Account Number', detail.accountNumber, () {
+              Clipboard.setData(ClipboardData(text: detail.accountNumber));
+              showSuccessDialog(context, 'Account Number copied to clipboard');
+            }),
             if (detail.location == 'UK' && detail.shortCode != null) ...[
               const SizedBox(height: 8),
-              _buildDetailRow('Short Code', detail.shortCode!),
+              _buildDetailRow('Short Code', detail.shortCode!, () {
+                Clipboard.setData(ClipboardData(text: detail.shortCode!));
+                showSuccessDialog(context, 'Short Code copied to clipboard');
+              }),
             ],
           ],
         ),
@@ -569,7 +529,7 @@ Account Number: ${detail.accountNumber}${detail.location == 'UK' && detail.short
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, VoidCallback onCopy) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -586,6 +546,13 @@ Account Number: ${detail.accountNumber}${detail.location == 'UK' && detail.short
             value,
             fontSize: 14,
           ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.copy, size: 18),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: onCopy,
+          tooltip: 'Copy $label',
         ),
       ],
     );

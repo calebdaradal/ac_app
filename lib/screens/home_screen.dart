@@ -28,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   VehicleSummary? _affSummary;
   VehicleSummary? _stkSummary;
   bool _loading = true;
+  int _avatarRefreshKey = 0; // Increment this to force image reload
 
   @override
   void initState() {
@@ -113,13 +114,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _refreshProfile() async {
+    try {
+      await UserProfileService().refreshProfile();
+      if (mounted) {
+        setState(() {
+          // Increment refresh key to force image reload
+          _avatarRefreshKey++;
+        });
+      }
+    } catch (e) {
+      print('[HomeScreen] Error refreshing profile: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = UserProfileService().profile;
+    final avatarUrl = profile?.avatarUrl;
     
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        surfaceTintColor: Colors.transparent,
         toolbarHeight: 90,
         automaticallyImplyLeading: false,
         backgroundColor: Colors.transparent,
@@ -134,30 +151,59 @@ class _HomeScreenState extends State<HomeScreen> {
               InkWell(
                 borderRadius: BorderRadius.all(Radius.circular(10)),
                 highlightColor: Colors.grey.withOpacity(0.5),
-                onTap: () {
-                  Navigator.pushNamed(context, '/profile');
+                onTap: () async {
+                  await Navigator.pushNamed(context, '/profile');
+                  // Refresh profile when returning from profile screen
+                  await _refreshProfile();
                 },
                 child: Padding(
                   padding: const EdgeInsets.only(top: 8, bottom: 8, right: 15),
                   child: Row(
                     children: [
+
+                      SizedBox(width: 8),
     
-                      Container(
-                        width: 60,
-                        height: 80,
-                        margin: const EdgeInsets.all(1),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                            image: profile?.avatarUrl != null
-                                ? DecorationImage(
-                                    image: NetworkImage(profile!.avatarUrl!),
-                                    fit: BoxFit.cover,
-                                  )
-                                : DecorationImage(
-                                    image: AssetImage('assets/img/sample/man.jpg'),
-                          ),
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(50),
+                          child: avatarUrl != null
+                              ? Image.network(
+                                  avatarUrl,
+                                  key: ValueKey('${avatarUrl}_$_avatarRefreshKey'),
+                                  fit: BoxFit.cover,
+                                  width: 50,
+                                  height: 50,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    print('[HomeScreen] Error loading avatar: $error');
+                                    print('[HomeScreen] Avatar URL: $avatarUrl');
+                                    return Image.asset(
+                                      'assets/img/sample/placeholder.png',
+                                      fit: BoxFit.cover,
+                                      width: 60,
+                                      height: 60,
+                                    );
+                                  },
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Image.asset(
+                                      'assets/img/sample/placeholder.png',
+                                      fit: BoxFit.cover,
+                                      width: 60,
+                                      height: 60,
+                                    );
+                                  },
+                                )
+                              : Image.asset(
+                                  'assets/img/sample/placeholder.png',
+                                  fit: BoxFit.cover,
+                                  width: 60,
+                                  height: 60,
+                                ),
                         ),
                       ),
+                      SizedBox(width: 8),
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,

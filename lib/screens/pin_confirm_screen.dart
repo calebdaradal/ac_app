@@ -97,40 +97,42 @@ class _PinConfirmScreenState extends State<PinConfirmScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(backgroundColor: Colors.white,),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-    
-          SvgPicture.asset('assets/img/logo/OrangeLeaf.svg', width: 90,),
-    
-          const SizedBox(height: 30),
-    
-          TitleText('Confirm your PIN', fontSize: 30, color: AppColors.titleColor),
-    
-          const SizedBox(height: 30,),
-    
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(4, (i) => _Dot(filled: i < _pin.length)),
-          ),
-    
-          const SizedBox(height: 8),
-    
-          if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-          const SizedBox(height: 24),
-    
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: NumericKeypad(
-              onTap: (v) => _tap(v, expected, isUpdating),
-              diameter: 89,
-              spacing: 28,
+      body: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            
+            SvgPicture.asset('assets/img/logo/OrangeLeaf.svg', width: 90,),
+            
+            const SizedBox(height: 30),
+            
+            TitleText('Confirm your PIN', fontSize: 30, color: AppColors.titleColor),
+            
+            const SizedBox(height: 30,),
+            
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(4, (i) => _Dot(filled: i < _pin.length)),
             ),
-          ),
-    
-    
-          const SizedBox(height: 50,),
-        ],
+            
+            const SizedBox(height: 8),
+            
+            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 24),
+            
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: NumericKeypad(
+                onTap: (v) => _tap(v, expected, isUpdating),
+                diameter: 89,
+                spacing: 28,
+              ),
+            ),
+            
+            
+            const SizedBox(height: 50,),
+          ],
+        ),
       ),
     );
   }

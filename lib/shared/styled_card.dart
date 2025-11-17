@@ -4,6 +4,144 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:intl/intl.dart';
 
+// class HomeCard extends StatelessWidget {
+//   const HomeCard({
+//     required this.currentBalance,
+//     required this.yield,
+//     required this.totalContributions,
+//     required this.totalYield, 
+//     super.key
+//     });
+
+//     final double currentBalance;
+//     final double yield;
+//     final double totalContributions;
+//     final double totalYield;
+
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final NumberFormat currencyFormatter = NumberFormat('#,##0.00');
+//     return Card(
+//       margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
+//       color: Color.fromRGBO(252, 252, 252, 1),
+//       shadowColor: Colors.transparent,
+//       child: Padding(
+//         padding: const EdgeInsets.all(20.0),
+//         child: Column(
+//           children: [
+//             Row(
+//               children: [
+//                 Expanded(
+//                   flex: 3,
+//                   child: Column(
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     children: [
+//                       PrimaryText('Current Balance', fontSize: 18, color: AppColors.secondaryTextColor),
+//                       Row(
+//                         crossAxisAlignment: CrossAxisAlignment.start,
+//                         children: [
+//                           TitleText('₱', color: Colors.grey),
+//                           Flexible(
+//                             child: TitleText(
+//                               currencyFormatter.format(currentBalance),
+//                             ),
+//                           ),
+//                         ],
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+
+//                 const SizedBox(width: 12),
+
+//                 Expanded(
+//                   flex: 2,
+//                   child: Column(
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     children: [
+//                       PrimaryText('Yield%', fontSize: 18, color: AppColors.secondaryTextColor),
+//                       Row(
+//                         children: [
+//                           Flexible(
+//                             child: PrimaryText(
+//                               yield.toStringAsFixed(2),
+//                               fontSize: 26,
+//                               color: yield >= 0 ? AppColors.increaseColor : AppColors.decreaseColor,
+//                             ),
+//                           ),
+//                           const SizedBox(width: 5),
+//                           SvgPicture.asset(
+//                             yield >= 0 
+//                               ? 'assets/img/icons/increase.svg'
+//                               : 'assets/img/icons/decrease.svg',
+//                             width: 25,
+//                           )
+//                         ],
+//                       )
+//                     ],
+//                   ),
+//                 )
+//               ],
+//             ),
+
+//             const SizedBox(height: 20,),
+
+//             Row(
+//               children: [
+//                 Expanded(
+//                   child: Column(
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     children: [
+//                       PrimaryText('Total Contributions', fontSize: 18, color: AppColors.secondaryTextColor),
+//                       Row(
+//                         crossAxisAlignment: CrossAxisAlignment.start,
+//                         children: [
+//                           TitleText('₱', color: Colors.grey, fontSize: 25,),
+//                           Flexible(
+//                             child: TitleText(
+//                               currencyFormatter.format(totalContributions),
+//                               fontSize: 25,
+//                             ),
+//                           ),
+//                         ],
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+
+//                 const SizedBox(width: 12),
+
+//                 Expanded(
+//                   child: Column(
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     children: [
+//                       PrimaryText('Total Yield', fontSize: 18, color: AppColors.secondaryTextColor),
+//                       Row(
+//                         crossAxisAlignment: CrossAxisAlignment.start,
+//                         children: [
+//                           TitleText('₱', color: Colors.grey, fontSize: 25,),
+//                           Flexible(
+//                             child: TitleText(
+//                               currencyFormatter.format(totalYield),
+//                               fontSize: 25,
+//                             ),
+//                           ),
+//                         ],
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+//               ],
+//             ),
+
+//           ],
+//         ),
+//       )
+//     );
+//   }
+// }
+
 class HomeCard extends StatelessWidget {
   const HomeCard({
     required this.currentBalance,
@@ -33,108 +171,111 @@ class HomeCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  flex: 3,
+                  // flex: 3,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    spacing: 5,
                     children: [
                       PrimaryText('Current Balance', fontSize: 18, color: AppColors.secondaryTextColor),
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        
                         children: [
                           TitleText('₱', color: Colors.grey),
+
+                          const SizedBox(width: 6),
+
                           Flexible(
                             child: TitleText(
+                              fontSize: 30,
                               currencyFormatter.format(currentBalance),
                             ),
                           ),
+
+                          const SizedBox(width: 12),
+
+                          PrimaryText(
+                            '${yield.toStringAsFixed(2)}%',
+                            fontSize: 17,
+                            color: yield >= 0 ? AppColors.increaseColor : AppColors.decreaseColor,
+                          ),
+
+                          const SizedBox(width: 4),
+
+                          Icon(
+                            yield >= 0 
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                            size: 18,
+                            color: yield >= 0 ? AppColors.increaseColor : AppColors.decreaseColor,
+                          ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      PrimaryText('Yield%', fontSize: 18, color: AppColors.secondaryTextColor),
-                      Row(
-                        children: [
-                          Flexible(
-                            child: PrimaryText(
-                              yield.toStringAsFixed(2),
-                              fontSize: 26,
-                              color: yield >= 0 ? AppColors.increaseColor : AppColors.decreaseColor,
-                            ),
+  
+                      
+                      SizedBox(height: 4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            // color: Colors.grey.withOpacity(0.1),
+                            border: Border(
+                              top: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
+                            )
                           ),
-                          const SizedBox(width: 5),
-                          SvgPicture.asset(
-                            yield >= 0 
-                              ? 'assets/img/icons/increase.svg'
-                              : 'assets/img/icons/decrease.svg',
-                            width: 25,
-                          )
-                        ],
-                      )
-                    ],
-                  ),
-                )
-              ],
-            ),
+                        ),
+                      ),
 
-            const SizedBox(height: 20,),
-
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
                       PrimaryText('Total Contributions', fontSize: 18, color: AppColors.secondaryTextColor),
+                      
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           TitleText('₱', color: Colors.grey, fontSize: 25,),
-                          Flexible(
-                            child: TitleText(
+
+                          const SizedBox(width: 6),
+                          
+                          PrimaryText(
                               currencyFormatter.format(totalContributions),
                               fontSize: 25,
-                            ),
+                              color: AppColors.titleColor,
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
 
-                const SizedBox(width: 12),
+                      SizedBox(height: 4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            // color: Colors.grey.withOpacity(0.1),
+                            border: Border(
+                              top: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
+                            )
+                          ),
+                        ),
+                      ),
 
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
                       PrimaryText('Total Yield', fontSize: 18, color: AppColors.secondaryTextColor),
+
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           TitleText('₱', color: Colors.grey, fontSize: 25,),
-                          Flexible(
-                            child: TitleText(
-                              currencyFormatter.format(totalYield),
-                              fontSize: 25,
-                            ),
+
+                          const SizedBox(width: 6),
+
+                          PrimaryText(
+                            currencyFormatter.format(totalYield),
+                            fontSize: 25,
+                            color: AppColors.titleColor,
                           ),
                         ],
                       ),
                     ],
                   ),
-                ),
+                ),                
               ],
             ),
 
+            
           ],
         ),
       )

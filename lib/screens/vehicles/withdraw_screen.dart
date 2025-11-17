@@ -227,177 +227,179 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
         backgroundColor: Colors.white,
         // title: const Text('Withdrawal Funds'),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        BankDetailsCard(
-                          bankName: _bankDetails?.bankName ?? 'N/A',
-                          accountNumber: _bankDetails?.accountNumber ?? 'N/A',
-                          locationName: _bankDetails?.location ?? 'N/A',
-                          accountName: _bankDetails?.accountName ?? 'N/A',
-                          onTap: () {
-                            try {
-                              showBankDetailsModal(
-                                context,
-                                existingDetails: _bankDetails,
-                                onSaved: () {
-                                  _loadBankDetails();
-                                },
-                              );
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error opening bank details: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 50.0),
-                        TitleText('Withdrawal Funds', fontSize: 24),
-                        const SizedBox(height: 8.0),
-                        if (_currentBalance != null) ...[
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          BankDetailsCard(
+                            bankName: _bankDetails?.bankName ?? 'N/A',
+                            accountNumber: _bankDetails?.accountNumber ?? 'N/A',
+                            locationName: _bankDetails?.location ?? 'N/A',
+                            accountName: _bankDetails?.accountName ?? 'N/A',
+                            onTap: () {
+                              try {
+                                showBankDetailsModal(
+                                  context,
+                                  existingDetails: _bankDetails,
+                                  onSaved: () {
+                                    _loadBankDetails();
+                                  },
+                                );
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error opening bank details: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 50.0),
+                          TitleText('Withdrawal Funds', fontSize: 24),
+                          const SizedBox(height: 8.0),
+                          if (_currentBalance != null) ...[
+                            SecondaryText(
+                              'Available Balance: ₱${_currentBalance!.toStringAsFixed(2)}',
+                              fontSize: 16,
+                              color: AppColors.primaryColor,
+                            ),
+                            const SizedBox(height: 4.0),
+                          ],
                           SecondaryText(
-                            'Available Balance: ₱${_currentBalance!.toStringAsFixed(2)}',
-                            fontSize: 16,
-                            color: AppColors.primaryColor,
+                            'Withdrawals over 33.33% of balance incur a 5% fee',
+                            fontSize: 14,
+                            color: Colors.grey,
                           ),
-                          const SizedBox(height: 4.0),
-                        ],
-                        SecondaryText(
-                          'Withdrawals over 33.33% of balance incur a 5% fee',
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 24.0),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                          child: DigitField(
-                            controller: _amountController,
-                            keyboardType: TextInputType.number,
-                            label: 'Amount',
-                          ),
-                        ),
-                        const SizedBox(height: 16.0),
-                        // Fee and total information
-                        if (_feeAmount > 0 && _currentBalance != null) ...[
+                          const SizedBox(height: 24.0),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                            child: Container(
-                              padding: const EdgeInsets.all(16.0),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade50,
-                                borderRadius: BorderRadius.circular(8.0),
-                                border: Border.all(
-                                  color: Colors.orange.shade200,
-                                  width: 1,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      SecondaryText(
-                                        'Withdrawal Amount:',
-                                        fontSize: 14,
-                                        color: Colors.black87,
-                                      ),
-                                      SecondaryText(
-                                        '₱${(_totalAmount - _feeAmount).toStringAsFixed(2)}',
-                                        fontSize: 14,
-                                        color: Colors.black87,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4.0),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      SecondaryText(
-                                        'Fee (5%):',
-                                        fontSize: 14,
-                                        color: Colors.orange.shade700,
-                                      ),
-                                      SecondaryText(
-                                        '₱${_feeAmount.toStringAsFixed(2)}',
-                                        fontSize: 14,
-                                        color: Colors.orange.shade700,
-                                      ),
-                                    ],
-                                  ),
-                                  const Divider(height: 16.0),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      TitleText(
-                                        'Total Deduction:',
-                                        fontSize: 16,
-                                      ),
-                                      TitleText(
-                                        '₱${_totalAmount.toStringAsFixed(2)}',
-                                        fontSize: 16,
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                            child: DigitField(
+                              controller: _amountController,
+                              keyboardType: TextInputType.number,
+                              label: 'Amount',
                             ),
                           ),
+                          const SizedBox(height: 16.0),
+                          // Fee and total information
+                          if (_feeAmount > 0 && _currentBalance != null) ...[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                              child: Container(
+                                padding: const EdgeInsets.all(16.0),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  border: Border.all(
+                                    color: Colors.orange.shade200,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        SecondaryText(
+                                          'Withdrawal Amount:',
+                                          fontSize: 14,
+                                          color: Colors.black87,
+                                        ),
+                                        SecondaryText(
+                                          '₱${(_totalAmount - _feeAmount).toStringAsFixed(2)}',
+                                          fontSize: 14,
+                                          color: Colors.black87,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4.0),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        SecondaryText(
+                                          'Fee (5%):',
+                                          fontSize: 14,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                        SecondaryText(
+                                          '₱${_feeAmount.toStringAsFixed(2)}',
+                                          fontSize: 14,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                      ],
+                                    ),
+                                    const Divider(height: 16.0),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        TitleText(
+                                          'Total Deduction:',
+                                          fontSize: 16,
+                                        ),
+                                        TitleText(
+                                          '₱${_totalAmount.toStringAsFixed(2)}',
+                                          fontSize: 16,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8.0),
+                          ],
                           const SizedBox(height: 8.0),
                         ],
-                        const SizedBox(height: 8.0),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-                // Button fixed at bottom with safe spacing
-                Container(
-                  padding: const EdgeInsets.all(16.0),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
-                  ),
-                  child: SafeArea(
-                    top: false,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: StyledButton(
-                            onPressed: _submitting ? null : _handleWithdrawal,
-                            child: _submitting
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : PrimaryTextW('Withdrawal'),
-                          ),
+                  // Button fixed at bottom with safe spacing
+                  Container(
+                    padding: const EdgeInsets.all(16.0),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, -2),
                         ),
                       ],
                     ),
+                    child: SafeArea(
+                      top: false,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: StyledButton(
+                              onPressed: _submitting ? null : _handleWithdrawal,
+                              child: _submitting
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : PrimaryTextW('Withdrawal'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 }

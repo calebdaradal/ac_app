@@ -64,68 +64,71 @@ class _AuthEmailScreenState extends State<AuthEmailScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(backgroundColor: Colors.white,),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-
-            TitleText('Welcome Back!'),
-            const SizedBox(height: 8),
-            SecondaryText('Insert your account details to continue', fontSize: 15,),
-
-            const SizedBox(height: 17),
-
-            StyledTextfield(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              label: 'Enter email',
-              focusNode: _emailFocusNode,
-            ),
-
-            const SizedBox(height: 16),
-
-            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-
-            const SizedBox(height: 16),
-
-            
-            
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SecondaryText('By Continuing you adhere to our ', fontSize: 14, color: Color.fromRGBO(34, 43, 69, 1)),
-
-                      GestureDetector(
-                        onTap: () {},
-                        child: PrimaryText('Terms of Use', fontSize: 14)
-                      )
-                  ],
-                  ),
-    
-                  const SizedBox(height: 15),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: PrimaryButton(
-                          onPressed: (_loading || _emailFocusNode.hasFocus) ? null : () => _handleRequestOtp(),
-                          child: _loading ? const CircularProgressIndicator() : const PrimaryTextW('Continue'),
-                        ),
-                      )
-                    ],
-                  ),
-                  
-                ],
+      body: SafeArea(
+  
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+        
+              TitleText('Welcome Back!'),
+              const SizedBox(height: 8),
+              SecondaryText('Insert your account details to continue', fontSize: 15,),
+        
+              const SizedBox(height: 17),
+        
+              StyledTextfield(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                label: 'Enter email',
+                focusNode: _emailFocusNode,
               ),
-            ),
-
-            const SizedBox(height: 30)
-          ],
+        
+              const SizedBox(height: 16),
+        
+              if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+        
+              const SizedBox(height: 16),
+        
+              
+              
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SecondaryText('By continuing you adhere to our ', fontSize: 14, color: Color.fromRGBO(34, 43, 69, 1)),
+        
+                        GestureDetector(
+                          onTap: () {},
+                          child: PrimaryText('Terms of Use', fontSize: 14)
+                        )
+                    ],
+                    ),
+            
+                    const SizedBox(height: 15),
+        
+                    Row(
+                      children: [
+                        Expanded(
+                          child: PrimaryButton(
+                            onPressed: (_loading || _emailFocusNode.hasFocus) ? null : () => _handleRequestOtp(),
+                            child: _loading ? const CircularProgressIndicator() : const PrimaryTextW('Continue'),
+                          ),
+                        )
+                      ],
+                    ),
+                    
+                  ],
+                ),
+              ),
+        
+              const SizedBox(height: 30)
+            ],
+          ),
         ),
       ),
     );

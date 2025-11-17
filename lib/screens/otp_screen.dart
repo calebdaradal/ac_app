@@ -137,15 +137,15 @@ class _OtpScreenState extends State<OtpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(backgroundColor: Colors.white,),
-        body: Padding(
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(backgroundColor: Colors.white,),
+      body: SafeArea(
+        child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-      
+            
               Align(
                 alignment: Alignment.centerLeft,
                 child: Column(
@@ -162,23 +162,23 @@ class _OtpScreenState extends State<OtpScreen> {
                   ],
                 )
               ),
-      
+            
               
-      
+            
               const SizedBox(height: 24),
-      
+            
               StyledPinput(
                  onChanged: (v) => _code = v,
                  onCompleted: (_) => _verify(_email ?? ''),
                 keyboardType: TextInputType.number,
               ),
-      
+            
               const SizedBox(height: 16),
-      
+            
               if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-      
+            
               const SizedBox(height: 16),
-      
+            
               // Resend section
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -197,7 +197,7 @@ class _OtpScreenState extends State<OtpScreen> {
                 ],
               )
               
-      
+            
               // SizedBox(
               //   width: double.infinity,
               //   child: ElevatedButton(

@@ -8,17 +8,19 @@ import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/svg.dart';
 
 const _pageIdentifier = 'SP';
 
 enum TransactionFilter {
-  removeFilters, // Reset to default
   dateAscending,
   dateDescending,
-  yield,
+}
+
+enum TransactionType {
+  all,
+  yields,
   transactions,
-  allPending,
+  pending,
 }
 
 class StkScreen extends StatefulWidget {
@@ -35,7 +37,8 @@ class _StkScreenState extends State<StkScreen> {
   List<TransactionHistoryItem> _recentTransactions = [];
   List<TransactionHistoryItem> _allTransactions = []; // Keep all transactions for filtering
   List<TransactionHistoryItem> _filteredTransactions = []; // Filtered list shown to user
-  TransactionFilter _currentFilter = TransactionFilter.dateDescending; // Default filter
+  TransactionFilter _currentFilter = TransactionFilter.dateDescending; // Default date sort
+  TransactionType _selectedType = TransactionType.all; // Default type filter
   bool _loadingTransactions = false;
 
   @override
@@ -101,59 +104,29 @@ class _StkScreenState extends State<StkScreen> {
   void _applyFilter() {
     List<TransactionHistoryItem> filtered = List.from(_allTransactions);
 
-    switch (_currentFilter) {
-      case TransactionFilter.removeFilters:
-        // Reset to default filter (Date: Descending)
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        filtered = filtered.where((trans) {
-          final appliedDate = trans.date;
-          final appliedDateOnly = DateTime(appliedDate.year, appliedDate.month, appliedDate.day);
-          return appliedDateOnly.isBefore(today) || appliedDateOnly.isAtSameMomentAs(today);
-        }).toList();
-        filtered.sort((a, b) => b.date.compareTo(a.date)); // Descending
+    // Apply type filter
+    switch (_selectedType) {
+      case TransactionType.yields:
+        filtered = filtered.where((trans) => trans.type == 'Yield').toList();
         break;
+      case TransactionType.transactions:
+        filtered = filtered.where((trans) => trans.type == 'Deposit' || trans.type == 'Withdrawal').toList();
+        break;
+      case TransactionType.pending:
+        filtered = filtered.where((trans) => trans.status == 'Verifying' || trans.status == 'PENDING').toList();
+        break;
+      case TransactionType.all:
+        // Show all transactions
+        break;
+    }
 
+    // Apply date sorting
+    switch (_currentFilter) {
       case TransactionFilter.dateAscending:
-        // Filter by applied_at date (only applied transactions) and sort ascending
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        filtered = filtered.where((trans) {
-          final appliedDate = trans.date;
-          final appliedDateOnly = DateTime(appliedDate.year, appliedDate.month, appliedDate.day);
-          return appliedDateOnly.isBefore(today) || appliedDateOnly.isAtSameMomentAs(today);
-        }).toList();
         filtered.sort((a, b) => a.date.compareTo(b.date)); // Ascending
         break;
-
       case TransactionFilter.dateDescending:
-        // Filter by applied_at date (only applied transactions) and sort descending
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        filtered = filtered.where((trans) {
-          final appliedDate = trans.date;
-          final appliedDateOnly = DateTime(appliedDate.year, appliedDate.month, appliedDate.day);
-          return appliedDateOnly.isBefore(today) || appliedDateOnly.isAtSameMomentAs(today);
-        }).toList();
         filtered.sort((a, b) => b.date.compareTo(a.date)); // Descending
-        break;
-
-      case TransactionFilter.yield:
-        // Show only Yield transactions
-        filtered = filtered.where((trans) => trans.type == 'Yield').toList();
-        filtered.sort((a, b) => b.date.compareTo(a.date)); // Most recent first
-        break;
-
-      case TransactionFilter.transactions:
-        // Show only Deposits and Withdrawals (exclude Yields)
-        filtered = filtered.where((trans) => trans.type == 'Deposit' || trans.type == 'Withdrawal').toList();
-        filtered.sort((a, b) => b.date.compareTo(a.date)); // Most recent first
-        break;
-
-      case TransactionFilter.allPending:
-        // Show only pending/verifying transactions
-        filtered = filtered.where((trans) => trans.status == 'Verifying' || trans.status == 'PENDING').toList();
-        filtered.sort((a, b) => b.date.compareTo(a.date)); // Most recent first
         break;
     }
 
@@ -163,6 +136,41 @@ class _StkScreenState extends State<StkScreen> {
           ? _filteredTransactions.take(3).toList()
           : [];
     });
+  }
+
+  Widget _buildTypeToggle(String label, TransactionType type, {StateSetter? setSheetState}) {
+    final isSelected = _selectedType == type;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedType = type;
+          });
+          _applyFilter();
+          // Rebuild the sheet content if inside bottom sheet
+          if (setSheetState != null) {
+            setSheetState(() {});
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.tertiaryColor : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : Colors.grey.shade700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _refreshData() async {
@@ -314,278 +322,146 @@ class _StkScreenState extends State<StkScreen> {
 
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Stack(
-                            alignment: Alignment.center,
+                          child: Row(
                             children: [
-                              const Text(
-                                'All Transactions',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                              ),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: PopupMenuButton<TransactionFilter>(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.filter_list_rounded),
-                                  onSelected: (TransactionFilter filter) {
-                                    setState(() {
-                                      _currentFilter = filter;
-                                    });
-                                    _applyFilter();
-                                    // Rebuild the sheet content
-                                    setSheetState(() {});
-                                  },
-                              itemBuilder: (BuildContext context) => [
-                                PopupMenuItem<TransactionFilter>(
-                                  value: TransactionFilter.removeFilters,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.clear_all,
-                                        size: 20,
-                                        color: _currentFilter == TransactionFilter.removeFilters
-                                            ? AppColors.tertiaryColor
-                                            : Colors.grey.shade700,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        'Remove Filters',
-                                        style: TextStyle(
-                                          color: _currentFilter == TransactionFilter.removeFilters
-                                              ? AppColors.tertiaryColor
-                                              : Colors.grey.shade800,
-                                          fontWeight: _currentFilter == TransactionFilter.removeFilters
-                                              ? FontWeight.w600
-                                              : FontWeight.normal,
-                                        ),
-                                      ),
-                                      if (_currentFilter == TransactionFilter.removeFilters)
-                                        const Spacer(),
-                                      if (_currentFilter == TransactionFilter.removeFilters)
-                                        Icon(
-                                          Icons.check,
-                                          color: AppColors.tertiaryColor,
-                                          size: 20,
-                                        ),
-                                    ],
-                                  ),
+                              // Toggle buttons for transaction types
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    _buildTypeToggle('Yields', TransactionType.yields, setSheetState: setSheetState),
+                                    const SizedBox(width: 8),
+                                    _buildTypeToggle('Transactions', TransactionType.transactions, setSheetState: setSheetState),
+                                    const SizedBox(width: 8),
+                                    _buildTypeToggle('Pending', TransactionType.pending, setSheetState: setSheetState),
+                                  ],
                                 ),
-                                const PopupMenuDivider(),
-                                PopupMenuItem<TransactionFilter>(
-                                  value: TransactionFilter.dateAscending,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.arrow_upward,
-                                        size: 20,
-                                        color: _currentFilter == TransactionFilter.dateAscending
-                                            ? AppColors.tertiaryColor
-                                            : Colors.grey.shade700,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        'Date: Ascending',
-                                        style: TextStyle(
+                              ),
+                              // Date filter button
+                              PopupMenuButton<TransactionFilter>(
+                                color: Colors.white,
+                                icon: Icon(Icons.filter_list_rounded),
+                                onSelected: (TransactionFilter filter) {
+                                  setState(() {
+                                    _currentFilter = filter;
+                                  });
+                                  _applyFilter();
+                                  // Rebuild the sheet content
+                                  setSheetState(() {});
+                                },
+                                itemBuilder: (BuildContext context) => [
+                                  PopupMenuItem<TransactionFilter>(
+                                    value: TransactionFilter.dateAscending,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.arrow_upward,
+                                          size: 20,
                                           color: _currentFilter == TransactionFilter.dateAscending
                                               ? AppColors.tertiaryColor
-                                              : Colors.grey.shade800,
-                                          fontWeight: _currentFilter == TransactionFilter.dateAscending
-                                              ? FontWeight.w600
-                                              : FontWeight.normal,
+                                              : Colors.grey.shade700,
                                         ),
-                                      ),
-                                      if (_currentFilter == TransactionFilter.dateAscending)
-                                        const Spacer(),
-                                      if (_currentFilter == TransactionFilter.dateAscending)
-                                        Icon(
-                                          Icons.check,
-                                          color: AppColors.tertiaryColor,
-                                          size: 20,
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Date: Ascending',
+                                          style: TextStyle(
+                                            color: _currentFilter == TransactionFilter.dateAscending
+                                                ? AppColors.tertiaryColor
+                                                : Colors.grey.shade800,
+                                            fontWeight: _currentFilter == TransactionFilter.dateAscending
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                          ),
                                         ),
-                                    ],
+                                        if (_currentFilter == TransactionFilter.dateAscending)
+                                          const Spacer(),
+                                        if (_currentFilter == TransactionFilter.dateAscending)
+                                          Icon(
+                                            Icons.check,
+                                            color: AppColors.tertiaryColor,
+                                            size: 20,
+                                          ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                PopupMenuItem<TransactionFilter>(
-                                  value: TransactionFilter.dateDescending,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.arrow_downward,
-                                        size: 20,
-                                        color: _currentFilter == TransactionFilter.dateDescending
-                                            ? AppColors.tertiaryColor
-                                            : Colors.grey.shade700,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        'Date: Descending',
-                                        style: TextStyle(
+                                  PopupMenuItem<TransactionFilter>(
+                                    value: TransactionFilter.dateDescending,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.arrow_downward,
+                                          size: 20,
                                           color: _currentFilter == TransactionFilter.dateDescending
                                               ? AppColors.tertiaryColor
-                                              : Colors.grey.shade800,
-                                          fontWeight: _currentFilter == TransactionFilter.dateDescending
-                                              ? FontWeight.w600
-                                              : FontWeight.normal,
+                                              : Colors.grey.shade700,
                                         ),
-                                      ),
-                                      if (_currentFilter == TransactionFilter.dateDescending)
-                                        const Spacer(),
-                                      if (_currentFilter == TransactionFilter.dateDescending)
-                                        Icon(
-                                          Icons.check,
-                                          color: AppColors.tertiaryColor,
-                                          size: 20,
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'Date: Descending',
+                                          style: TextStyle(
+                                            color: _currentFilter == TransactionFilter.dateDescending
+                                                ? AppColors.tertiaryColor
+                                                : Colors.grey.shade800,
+                                            fontWeight: _currentFilter == TransactionFilter.dateDescending
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                          ),
                                         ),
-                                    ],
-                                  ),
-                                ),
-                                PopupMenuItem<TransactionFilter>(
-                                  value: TransactionFilter.yield,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.trending_up,
-                                        size: 20,
-                                        color: _currentFilter == TransactionFilter.yield
-                                            ? AppColors.tertiaryColor
-                                            : Colors.grey.shade700,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        'Yield',
-                                        style: TextStyle(
-                                          color: _currentFilter == TransactionFilter.yield
-                                              ? AppColors.tertiaryColor
-                                              : Colors.grey.shade800,
-                                          fontWeight: _currentFilter == TransactionFilter.yield
-                                              ? FontWeight.w600
-                                              : FontWeight.normal,
-                                        ),
-                                      ),
-                                      if (_currentFilter == TransactionFilter.yield)
-                                        const Spacer(),
-                                      if (_currentFilter == TransactionFilter.yield)
-                                        Icon(
-                                          Icons.check,
-                                          color: AppColors.tertiaryColor,
-                                          size: 20,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                PopupMenuItem<TransactionFilter>(
-                                  value: TransactionFilter.transactions,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.swap_horiz,
-                                        size: 20,
-                                        color: _currentFilter == TransactionFilter.transactions
-                                            ? AppColors.tertiaryColor
-                                            : Colors.grey.shade700,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        'Transactions',
-                                        style: TextStyle(
-                                          color: _currentFilter == TransactionFilter.transactions
-                                              ? AppColors.tertiaryColor
-                                              : Colors.grey.shade800,
-                                          fontWeight: _currentFilter == TransactionFilter.transactions
-                                              ? FontWeight.w600
-                                              : FontWeight.normal,
-                                        ),
-                                      ),
-                                      if (_currentFilter == TransactionFilter.transactions)
-                                        const Spacer(),
-                                      if (_currentFilter == TransactionFilter.transactions)
-                                        Icon(
-                                          Icons.check,
-                                          color: AppColors.tertiaryColor,
-                                          size: 20,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                PopupMenuItem<TransactionFilter>(
-                                  value: TransactionFilter.allPending,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.pending,
-                                        size: 20,
-                                        color: _currentFilter == TransactionFilter.allPending
-                                            ? AppColors.tertiaryColor
-                                            : Colors.grey.shade700,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        'All Pending',
-                                        style: TextStyle(
-                                          color: _currentFilter == TransactionFilter.allPending
-                                              ? AppColors.tertiaryColor
-                                              : Colors.grey.shade800,
-                                          fontWeight: _currentFilter == TransactionFilter.allPending
-                                              ? FontWeight.w600
-                                              : FontWeight.normal,
-                                        ),
-                                      ),
-                                      if (_currentFilter == TransactionFilter.allPending)
-                                        const Spacer(),
-                                      if (_currentFilter == TransactionFilter.allPending)
-                                        Icon(
-                                          Icons.check,
-                                          color: AppColors.tertiaryColor,
-                                          size: 20,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: (_filteredTransactions.isEmpty || _filteredTransactions.length == 0 || _allTransactions.isEmpty)
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey.shade400),
-                                  const SizedBox(height: 16),
-                                  PrimaryText(
-                                    'No transactions yet',
-                                    fontSize: 16,
-                                    color: Colors.grey.shade600,
+                                        if (_currentFilter == TransactionFilter.dateDescending)
+                                          const Spacer(),
+                                        if (_currentFilter == TransactionFilter.dateDescending)
+                                          Icon(
+                                            Icons.check,
+                                            color: AppColors.tertiaryColor,
+                                            size: 20,
+                                          ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
-                            )
-                          : ListView.builder(
-                              controller: scrollController,
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              itemCount: _filteredTransactions.length,
-                              itemBuilder: (_, i) {
-                                if (i >= _filteredTransactions.length) return const SizedBox.shrink();
-                                final trans = _filteredTransactions[i];
-                                return TransactionCard(
-                                  date: trans.displayDate,
-                                  amount: trans.amount,
-                                  info: trans.yieldPercent,
-                                  status: trans.status,
-                                  type: trans.type,
-                                  isPositive: trans.isPositive,
-                                );
-                              },
-                            ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: (_filteredTransactions.isEmpty || _filteredTransactions.length == 0 || _allTransactions.isEmpty)
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey.shade400),
+                                      const SizedBox(height: 16),
+                                      PrimaryText(
+                                        'No transactions yet',
+                                        fontSize: 16,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.builder(
+                                  controller: scrollController,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  itemCount: _filteredTransactions.length,
+                                  itemBuilder: (_, i) {
+                                    if (i >= _filteredTransactions.length) return const SizedBox.shrink();
+                                    final trans = _filteredTransactions[i];
+                                    return TransactionCard(
+                                      date: trans.displayDate,
+                                      amount: trans.amount,
+                                      info: trans.yieldPercent,
+                                      status: trans.status,
+                                      type: trans.type,
+                                      isPositive: trans.isPositive,
+                                    );
+                                  },
+                                ),
+                        ),
+                        const SizedBox(height: 50),
+                      ],
                     ),
-                    const SizedBox(height: 50),
-                  ],
-                ),
-              ),
-            );
+                  ),
+                );
               },
             );
           },
@@ -625,159 +501,141 @@ class _StkScreenState extends State<StkScreen> {
         //   ),
         // ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-        onRefresh: _refreshData,
-        color: AppColors.tertiaryColor,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Container(
-              color: AppColors.tertiaryColor,
-              height: 110,
-              padding: const EdgeInsets.only(bottom: 15.0, left: 15, right: 15),
-              child: Row(
-                children: [
-                  TitleText('SOL/ETH Staking Pool', color: Colors.white),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-    
-            // Card with bottom-centered button (overlap preserved)
-            Transform.translate(
-              offset: const Offset(0, -30),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 15),
-                child: Stack(
-                  clipBehavior: Clip.none,
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+          onRefresh: _refreshData,
+          color: AppColors.tertiaryColor,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Container(
+                color: AppColors.tertiaryColor,
+                height: 110,
+                padding: const EdgeInsets.only(bottom: 15.0, left: 15, right: 15),
+                child: Row(
                   children: [
-                    HomeCard(
-                      currentBalance: _subscription?.currentBalance ?? 0.0,
-                      yield: _subscription?.yieldPercentage ?? 0.0,
-                      totalContributions: _subscription?.totalContributions ?? 0.0,
-                      totalYield: _subscription?.calculatedYield ?? 0.0,
-                    ),
-                    Positioned(
-                      bottom: -30,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: GestureDetector(
-                          onTap: () {
-                            // TODO: expand/collapse recent transactions
-                          },
-                          child: SvgPicture.asset(
-                            'assets/img/icons/stk_arrow_down.svg',
-                            width: 80,
-                            height: 80,
-                          ),
-                        ),
-                      ),
-                    ),
+                    TitleText('SOL/ETH Staking Pool', color: Colors.white),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
-            ),
-    
-            // Space so the button doesn't overlap the next section
-            // const SizedBox(height: 6),
-    
-            // New section AFTER the HomeCard
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: StyledButton(
-                          backgroundColor: AppColors.tertiaryColor,
-                          onPressed: _navigateToDeposit, 
-                          child: TitleText('Deposit Funds', color: Colors.white, fontSize: 16),
-                        ),
-                      ),
-
-                      // Expanded(child: SizedBox(width: 10,)),
-                      const SizedBox(width: 6),
-                      
-                      Expanded(
-                        child: StyledButton(
-                          backgroundColor: const Color.fromARGB(255, 85, 85, 85),
-                          onPressed: _navigateToWithdraw, 
-                          child: TitleText('Withdraw Funds', color: Colors.white, fontSize: 16),
-                        ),
-                      ),
-                    ],
+            
+              // Card with bottom-centered button (overlap preserved)
+              Transform.translate(
+                offset: const Offset(0, -30),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  child: HomeCard(
+                    currentBalance: _subscription?.currentBalance ?? 0.0,
+                    yield: _subscription?.yieldPercentage ?? 0.0,
+                    totalContributions: _subscription?.totalContributions ?? 0.0,
+                    totalYield: _subscription?.calculatedYield ?? 0.0,
                   ),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      PrimaryText('Recent Transactions', fontSize: 14, color: Colors.grey),
-                      GestureDetector(
-                        onTap: _showTransactionsSheet,
-                        child: PrimaryText('See All', color: AppColors.tertiaryColor),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Transaction history
-                  if (_loadingTransactions)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  else if (_recentTransactions.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade400),
-                            const SizedBox(height: 12),
-                            PrimaryText(
-                              'No transactions yet',
-                              fontSize: 14,
-                              color: Colors.grey.shade600,
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    Column(
-                      children: _recentTransactions.map((trans) {
-                        return TransactionCard(
-                          date: trans.displayDate,
-                          amount: trans.amount,
-                          info: trans.yieldPercent,
-                          status: trans.status,
-                          type: trans.type,
-                          isPositive: trans.isPositive,
-                        );
-                      }).toList(),
-                    ),
-    
-                  
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
+            
+              // Space so the button doesn't overlap the next section
+              // const SizedBox(height: 6),
+            
+              // New section AFTER the HomeCard
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+        
+                    Row(
+                      children: [
+                        Expanded(
+                          child: StyledButton(
+                            backgroundColor: AppColors.tertiaryColor,
+                            onPressed: _navigateToDeposit, 
+                            child: TitleText('Deposit Funds', color: Colors.white, fontSize: 16),
+                          ),
+                        ),
+        
+                        // Expanded(child: SizedBox(width: 10,)),
+                        const SizedBox(width: 6),
+                        
+                        Expanded(
+                          child: StyledButton(
+                            backgroundColor: const Color.fromARGB(255, 85, 85, 85),
+                            onPressed: _navigateToWithdraw, 
+                            child: TitleText('Withdraw Funds', color: Colors.white, fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+        
+                    const SizedBox(height: 12),
+        
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        PrimaryText('Recent Transactions', fontSize: 14, color: Colors.grey),
+                        GestureDetector(
+                          onTap: _showTransactionsSheet,
+                          child: PrimaryText('See All', color: AppColors.tertiaryColor),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Transaction history
+                    if (_loadingTransactions)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    else if (_recentTransactions.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(32),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade400),
+                              const SizedBox(height: 12),
+                              PrimaryText(
+                                'No transactions yet',
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Column(
+                        children: _recentTransactions.map((trans) {
+                          return TransactionCard(
+                            date: trans.displayDate,
+                            amount: trans.amount,
+                            info: trans.yieldPercent,
+                            status: trans.status,
+                            type: trans.type,
+                            isPositive: trans.isPositive,
+                          );
+                        }).toList(),
+                      ),
+            
+                    
+                  ],
+                ),
+              ),
+            ],
+          ),
+          ),
         ),
       ),
     );

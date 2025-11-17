@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import '../shared/styled_text.dart';
 import '../shared/styled_textfield.dart';
 import '../shared/styled_button.dart';
@@ -6,6 +10,7 @@ import '../shared/success_dialog.dart';
 import '../theme.dart';
 import '../services/user_profile_service.dart';
 import '../services/bank_details_service.dart';
+import '../services/avatar_service.dart';
 import '../constants/banks_data.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'verify_current_pin_screen.dart';
@@ -42,6 +47,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isUpdatingProfile = false;
   bool _isUpdatingBank = false;
   bool _isAdmin = false;
+  bool _isUploadingAvatar = false;
+  String? _avatarUrl;
+  int _avatarRefreshKey = 0; // Increment this to force image reload
+  final ImagePicker _imagePicker = ImagePicker();
+  final AvatarService _avatarService = AvatarService();
 
   @override
   void initState() {
@@ -74,6 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _lastNameController.text = profile.lastName ?? '';
           _emailController.text = profile.email;
           _isAdmin = profile.isAdmin == true;
+          _avatarUrl = profile.avatarUrl;
           _isLoadingProfile = false;
         });
       }
@@ -84,6 +95,195 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
       setState(() => _isLoadingProfile = false);
+    }
+  }
+  
+  Future<void> _pickAndUploadAvatar() async {
+    try {
+      // Show image source selection dialog
+      final ImageSource? source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Select Image Source'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Photo Library'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+            ],
+          ),
+        ),
+      );
+      
+      if (source == null) return;
+      
+      // Pick image - don't compress here, we'll handle it after cropping
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+      );
+      
+      if (pickedFile == null) return;
+      
+      // Read original image file
+      final Uint8List originalBytes = await pickedFile.readAsBytes();
+      print('[ProfileScreen] Original image file size: ${originalBytes.length} bytes');
+      
+      // Decode image
+      final img.Image? originalImage = img.decodeImage(originalBytes);
+      
+      if (originalImage == null) {
+        throw Exception('Failed to decode image');
+      }
+      
+      print('[ProfileScreen] Original image dimensions: ${originalImage.width}x${originalImage.height}');
+      
+      // Crop to 1:1 aspect ratio (square) - center crop
+      final int size = originalImage.width < originalImage.height 
+          ? originalImage.width 
+          : originalImage.height;
+      
+      final int x = (originalImage.width - size) ~/ 2;
+      final int y = (originalImage.height - size) ~/ 2;
+      
+      print('[ProfileScreen] Cropping to square: ${size}x${size} from position ($x, $y)');
+      
+      final img.Image croppedImage = img.copyCrop(
+        originalImage,
+        x: x,
+        y: y,
+        width: size,
+        height: size,
+      );
+      
+      // Resize to max 800x800
+      final int targetSize = size > 800 ? 800 : size;
+      print('[ProfileScreen] Resizing to: ${targetSize}x${targetSize}');
+      
+      final img.Image resizedImage = img.copyResize(
+        croppedImage,
+        width: targetSize,
+        height: targetSize,
+        interpolation: img.Interpolation.cubic,
+      );
+      
+      print('[ProfileScreen] Final processed dimensions: ${resizedImage.width}x${resizedImage.height}');
+      
+      // Encode to PNG with compression
+      final Uint8List pngBytes = Uint8List.fromList(img.encodePng(resizedImage));
+      print('[ProfileScreen] Processed PNG size: ${pngBytes.length} bytes');
+      
+      // Save to temporary file
+      final Directory tempDir = Directory.systemTemp;
+      final String tempPath = '${tempDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}.png';
+      final File imageFile = File(tempPath);
+      await imageFile.writeAsBytes(pngBytes);
+      
+      final fileSize = await imageFile.length();
+      print('[ProfileScreen] Saved processed image to: $tempPath');
+      print('[ProfileScreen] File size on disk: $fileSize bytes');
+      
+      // Verify the file was written correctly
+      if (fileSize == 0) {
+        throw Exception('Failed to save processed image - file is empty');
+      }
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      setState(() => _isUploadingAvatar = true);
+      
+      // Verify the processed file before uploading - read fresh bytes to ensure we're uploading the new file
+      print('[ProfileScreen] About to upload processed file: ${imageFile.path}');
+      print('[ProfileScreen] File exists: ${await imageFile.exists()}');
+      
+      // Read the file bytes directly to ensure we're uploading the correct file
+      final fileBytes = await imageFile.readAsBytes();
+      print('[ProfileScreen] File bytes size: ${fileBytes.length} bytes');
+      
+      // Decode to verify dimensions
+      final verifyImage = img.decodeImage(fileBytes);
+      if (verifyImage != null) {
+        print('[ProfileScreen] Verified image dimensions before upload: ${verifyImage.width}x${verifyImage.height}');
+      } else {
+        throw Exception('Failed to verify processed image before upload');
+      }
+      
+      // Create a new file from bytes to ensure we're not using a cached file
+      final uploadTimestamp = DateTime.now().millisecondsSinceEpoch;
+      final uploadFilePath = '${tempDir.path}/avatar_upload_$uploadTimestamp.png';
+      final uploadFile = File(uploadFilePath);
+      await uploadFile.writeAsBytes(fileBytes);
+      print('[ProfileScreen] Created fresh upload file: $uploadFilePath');
+      
+      // Upload avatar (this will delete old avatars first)
+      final avatarUrl = await _avatarService.uploadAvatar(uploadFile, user.id);
+      print('[ProfileScreen] Avatar uploaded, URL: $avatarUrl');
+      
+      // Clean up temporary files
+      try {
+        if (await imageFile.exists()) await imageFile.delete();
+        if (await uploadFile.exists()) await uploadFile.delete();
+      } catch (e) {
+        print('[ProfileScreen] Warning: Could not delete temp files: $e');
+      }
+      
+      // Update profile in database
+      await _avatarService.updateProfileAvatarUrl(user.id, avatarUrl);
+      print('[ProfileScreen] Profile updated with avatar URL');
+      
+      // Refresh profile service
+      await UserProfileService().refreshProfile();
+      
+      // Small delay to let Supabase CDN propagate the new file
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
+      // Refresh profile service again to ensure we have the latest data
+      await UserProfileService().refreshProfile();
+      
+      // Reload profile data in this screen to get updated avatar URL
+      // Update both avatar URL and refresh key in the same setState
+      final profile = UserProfileService().profile;
+      if (mounted) {
+        setState(() {
+          _isUploadingAvatar = false;
+          if (profile != null) {
+            _avatarUrl = profile.avatarUrl;
+            _avatarRefreshKey++; // Force image widget to reload with new key
+            print('[ProfileScreen] Updated _avatarUrl to: $_avatarUrl');
+            print('[ProfileScreen] Updated _avatarRefreshKey to: $_avatarRefreshKey');
+          }
+        });
+      }
+      
+      // Force another rebuild after a short delay to ensure image loads
+      if (mounted) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        setState(() {
+          _avatarRefreshKey++; // Increment again to force reload
+        });
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Avatar updated successfully!')),
+        );
+      }
+    } catch (e) {
+      setState(() => _isUploadingAvatar = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading avatar: $e')),
+        );
+      }
     }
   }
 
@@ -516,6 +716,94 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Avatar Section
+                    Center(
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.primaryColor,
+                                width: 3,
+                              ),
+                            ),
+                            child: ClipOval(
+                              child: _avatarUrl != null
+                                  ? Image.network(
+                                      '$_avatarUrl?refresh=$_avatarRefreshKey',
+                                      key: ValueKey('${_avatarUrl}_$_avatarRefreshKey'),
+                                      fit: BoxFit.cover,
+                                      width: 120,
+                                      height: 120,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        print('[ProfileScreen] Error loading avatar: $error');
+                                        print('[ProfileScreen] Avatar URL: $_avatarUrl');
+                                        return Image.asset(
+                                          'assets/img/sample/placeholder.png',
+                                          fit: BoxFit.cover,
+                                          width: 120,
+                                          height: 120,
+                                        );
+                                      },
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) return child;
+                                        return Image.asset(
+                                          'assets/img/sample/placeholder.png',
+                                          fit: BoxFit.cover,
+                                          width: 120,
+                                          height: 120,
+                                        );
+                                      },
+                                    )
+                                  : Image.asset(
+                                      'assets/img/sample/placeholder.png',
+                                      fit: BoxFit.cover,
+                                      width: 120,
+                                      height: 120,
+                                    ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 3,
+                                ),
+                              ),
+                              child: _isUploadingAvatar
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : IconButton(
+                                      icon: const Icon(
+                                        Icons.camera_alt,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                      onPressed: _pickAndUploadAvatar,
+                                      padding: EdgeInsets.zero,
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
                     const SecondaryText('First Name', fontSize: 14),
                     const SizedBox(height: 8),
                     StyledTextfield(
@@ -691,23 +979,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ],
                               ],
                             ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit, size: 20),
-                                  color: Colors.blue,
-                                  onPressed: () => _showBankDetailDialog(existingDetail: detail),
-                                  tooltip: 'Edit',
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, size: 20),
-                                  color: Colors.red,
-                                  onPressed: () => _deleteBankDetail(detail),
-                                  tooltip: 'Delete',
-                                ),
-                              ],
-                            ),
                           ),
                         );
                       }).toList(),
@@ -777,6 +1048,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: DropdownButtonFormField<String>(
                         value: _selectedBank,
+                        isExpanded: true,
                         decoration: InputDecoration(
                           labelText: _selectedLocation == null 
                               ? 'Select location first'
@@ -800,10 +1072,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           floatingLabelBehavior: FloatingLabelBehavior.never,
                         ),
+                        selectedItemBuilder: (BuildContext context) {
+                          return _availableBanks.map((bank) {
+                            return Text(
+                              bank,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            );
+                          }).toList();
+                        },
                         items: _availableBanks.map((bank) {
                           return DropdownMenuItem<String>(
                             value: bank,
-                            child: Text(bank),
+                            child: Text(
+                              bank,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           );
                         }).toList(),
                         onChanged: _selectedLocation == null 

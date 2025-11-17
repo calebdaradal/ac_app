@@ -29,6 +29,7 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _loading = true;
   Set<int> _expandedCards = {};
   Set<int> _processingIds = {};
+  int _avatarRefreshKey = 0; // Increment this to force image reload
 
   @override
   void initState() {
@@ -63,7 +64,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
   String _formatCurrency(double amount) {
     final formatter = NumberFormat.currency(
-      symbol: '₱',
+      symbol: '',
       decimalDigits: 2,
       locale: 'en_US',
     );
@@ -1906,6 +1907,7 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = UserProfileService().profile;
+    final avatarUrl = profile?.avatarUrl;
     
     return Scaffold(
       backgroundColor: Colors.white,
@@ -1923,24 +1925,55 @@ class _AdminScreenState extends State<AdminScreen> {
                 InkWell(
                   borderRadius: BorderRadius.all(Radius.circular(10)),
                   highlightColor: Colors.grey.withOpacity(0.5),
-                  onTap: () {},
+                  onTap: () async {
+                    await Navigator.pushNamed(context, '/profile');
+                    // Refresh profile when returning from profile screen
+                    if (mounted) {
+                      setState(() {
+                        _avatarRefreshKey++; // Force avatar reload
+                      });
+                    }
+                  },
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 8, right: 15),
                     child: Row(
                       children: [
-                        Container(
+                        SizedBox(
                           width: 60,
-                          height: 80,
-                          margin: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            image: profile?.avatarUrl != null
-                                ? DecorationImage(
-                                    image: NetworkImage(profile!.avatarUrl!),
+                          height: 60,
+                          child: ClipOval(
+                            child: avatarUrl != null
+                                ? Image.network(
+                                    avatarUrl,
+                                    key: ValueKey('${avatarUrl}_$_avatarRefreshKey'),
                                     fit: BoxFit.cover,
+                                    width: 60,
+                                    height: 60,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      print('[AdminScreen] Error loading avatar: $error');
+                                      print('[AdminScreen] Avatar URL: $avatarUrl');
+                                      return Image.asset(
+                                        'assets/img/sample/placeholder.png',
+                                        fit: BoxFit.cover,
+                                        width: 60,
+                                        height: 60,
+                                      );
+                                    },
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Image.asset(
+                                        'assets/img/sample/placeholder.png',
+                                        fit: BoxFit.cover,
+                                        width: 60,
+                                        height: 60,
+                                      );
+                                    },
                                   )
-                                : DecorationImage(
-                                    image: AssetImage('assets/img/sample/man.jpg'),
+                                : Image.asset(
+                                    'assets/img/sample/placeholder.png',
+                                    fit: BoxFit.cover,
+                                    width: 60,
+                                    height: 60,
                                   ),
                           ),
                         ),

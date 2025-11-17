@@ -34,20 +34,20 @@ class WelcomeScreen extends StatelessWidget {
                 // crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      PrimaryTextW('Want to be a partner? '),
-                      GestureDetector(
-                        onTap: () =>
-                            Navigator.pushNamed(context, AuthEmailScreen.routeName),
-                        child: const PrimaryTextW(
-                          'Sign up here',
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Row(
+                  //   mainAxisAlignment: MainAxisAlignment.start,
+                  //   children: [
+                  //     PrimaryTextW('Want to be a partner? '),
+                  //     GestureDetector(
+                  //       onTap: () =>
+                  //           Navigator.pushNamed(context, AuthEmailScreen.routeName),
+                  //       child: const PrimaryTextW(
+                  //         'Sign up here',
+                  //         decoration: TextDecoration.underline,
+                  //       ),
+                  //     ),
+                  //   ],
+                  // ),
               
                   const SizedBox(height: 20),
               
