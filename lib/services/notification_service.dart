@@ -128,40 +128,67 @@ class NotificationService {
         // Continue anyway
       }
       
-      // Try to update first (in case token already exists)
-      // This handles both cases: token exists for this user, or token exists for different user
-      try {
-        final updateResult = await Supabase.instance.client
-            .from('device_tokens')
-            .update({
-              'user_id': user.id,
-              'is_active': true,
-              'platform': platform,
-            })
-            .eq('device_token', token)
-            .select();
+      // Strategy: Check if token exists first, then update or insert accordingly
+      // This handles account switching on the same device properly
+      
+      print('[NotificationService] Attempting to register token for user ${user.id}, device_token: $token');
+      
+      // Step 1: Check if token exists (we can see it even if it belongs to another user)
+      final existingToken = await Supabase.instance.client
+          .from('device_tokens')
+          .select('id, user_id, is_active')
+          .eq('device_token', token)
+          .maybeSingle();
+      
+      if (existingToken != null) {
+        print('[NotificationService] Token exists: user_id=${existingToken['user_id']}, is_active=${existingToken['is_active']}');
         
-        if (updateResult.isNotEmpty) {
-          print('[NotificationService] ✅ Updated existing token for user ${user.id}');
-          // Verify the update worked
-          final verifyResult = await Supabase.instance.client
+        // Token exists - try to update it
+        // If it belongs to a different user, RLS should allow update if policy is correct
+        try {
+          final updateResult = await Supabase.instance.client
               .from('device_tokens')
-              .select('is_active, user_id')
+              .update({
+                'user_id': user.id,
+                'is_active': true,
+                'platform': platform,
+              })
               .eq('device_token', token)
-              .eq('user_id', user.id)
-              .single();
+              .select('user_id, is_active');
           
-          if (verifyResult['is_active'] == true && verifyResult['user_id'] == user.id) {
-            print('[NotificationService] ✅ Device token updated and verified for user ${user.id}');
-            return; // Success
+          print('[NotificationService] Update result: ${updateResult.length} row(s) updated');
+          
+          if (updateResult.isNotEmpty) {
+            final updated = updateResult[0];
+            print('[NotificationService] Updated: user_id=${updated['user_id']}, is_active=${updated['is_active']}');
+            
+            // Verify by querying again
+            final verify = await Supabase.instance.client
+                .from('device_tokens')
+                .select('user_id, is_active')
+                .eq('device_token', token)
+                .single();
+            
+            print('[NotificationService] Verification: user_id=${verify['user_id']}, is_active=${verify['is_active']}');
+            
+            if (verify['is_active'] == true && verify['user_id'] == user.id) {
+              print('[NotificationService] ✅ Token updated and verified for user ${user.id}');
+              return; // Success!
+            } else {
+              print('[NotificationService] ⚠️ Verification failed - RLS may be blocking');
+            }
+          } else {
+            print('[NotificationService] ⚠️ Update returned 0 rows - RLS policy is blocking the update');
+            print('[NotificationService] ⚠️ Please ensure RLS policy allows: USING (true) WITH CHECK (auth.uid()::text = user_id)');
           }
+        } catch (updateError) {
+          print('[NotificationService] Update error: $updateError');
         }
-      } catch (updateError) {
-        print('[NotificationService] Update failed (token might not exist): $updateError');
-        // Continue to try insert
+      } else {
+        print('[NotificationService] Token does not exist, will insert new one');
       }
       
-      // If update didn't work (token doesn't exist), try to insert
+      // Step 2: If token doesn't exist or update failed, try insert
       try {
         await Supabase.instance.client
             .from('device_tokens')
@@ -172,12 +199,25 @@ class NotificationService {
               'is_active': true,
             });
         print('[NotificationService] ✅ Inserted new token for user ${user.id}');
+        
+        // Verify insert
+        final verifyInsert = await Supabase.instance.client
+            .from('device_tokens')
+            .select('user_id, is_active')
+            .eq('device_token', token)
+            .single();
+        
+        if (verifyInsert['is_active'] == true && verifyInsert['user_id'] == user.id) {
+          print('[NotificationService] ✅ Token inserted and verified for user ${user.id}');
+          return; // Success!
+        }
       } catch (insertError) {
-        // If insert fails with duplicate key, token exists but update didn't work
-        // This shouldn't happen, but handle it gracefully
         if (insertError.toString().contains('duplicate key') || insertError.toString().contains('23505')) {
-          print('[NotificationService] ⚠️ Token exists but update failed, trying update again...');
-          // Try update one more time
+          print('[NotificationService] ⚠️ Insert failed - token exists but update returned 0 rows');
+          print('[NotificationService] ⚠️ This means RLS policy is blocking UPDATE');
+          print('[NotificationService] ⚠️ Please run FINAL_RLS_FIX.sql to fix the RLS policy');
+          
+          // Last resort: Try update one more time without verification
           try {
             await Supabase.instance.client
                 .from('device_tokens')
@@ -187,29 +227,14 @@ class NotificationService {
                   'platform': platform,
                 })
                 .eq('device_token', token);
-            print('[NotificationService] ✅ Updated token on retry');
-            return;
-          } catch (retryError) {
-            print('[NotificationService] ❌ Both insert and update failed: $retryError');
-            throw insertError; // Re-throw original error
+            
+            print('[NotificationService] Attempted final update (no verification)');
+          } catch (finalError) {
+            print('[NotificationService] ❌ Final update also failed: $finalError');
           }
         } else {
-          throw insertError; // Re-throw if it's a different error
+          print('[NotificationService] ❌ Insert failed: $insertError');
         }
-      }
-      
-      // Verify the token was stored/updated correctly
-      final verifyResult = await Supabase.instance.client
-          .from('device_tokens')
-          .select('is_active, user_id')
-          .eq('device_token', token)
-          .eq('user_id', user.id)
-          .single();
-      
-      if (verifyResult['is_active'] == true && verifyResult['user_id'] == user.id) {
-        print('[NotificationService] ✅ Device token stored and verified for user ${user.id}');
-      } else {
-        print('[NotificationService] ⚠️ Device token stored but verification failed: $verifyResult');
       }
     } catch (e) {
       print('[NotificationService] ❌ Error storing device token: $e');
