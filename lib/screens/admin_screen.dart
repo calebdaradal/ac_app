@@ -29,7 +29,6 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _loading = true;
   Set<int> _expandedCards = {};
   Set<int> _processingIds = {};
-  int _avatarRefreshKey = 0; // Increment this to force image reload
 
   @override
   void initState() {
@@ -941,6 +940,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
               title: Row(
                 children: [
                   Icon(Icons.account_balance_wallet, color: AppColors.primaryColor),
@@ -1906,9 +1907,6 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final profile = UserProfileService().profile;
-    final avatarUrl = profile?.avatarUrl;
-    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -1922,80 +1920,9 @@ class _AdminScreenState extends State<AdminScreen> {
             padding: const EdgeInsets.only(left: 12, top: 12, bottom: 12, right: 16),
             child: Row(
               children: [
-                InkWell(
-                  borderRadius: BorderRadius.all(Radius.circular(10)),
-                  highlightColor: Colors.grey.withOpacity(0.5),
-                  onTap: () async {
-                    await Navigator.pushNamed(context, '/profile');
-                    // Refresh profile when returning from profile screen
-                    if (mounted) {
-                      setState(() {
-                        _avatarRefreshKey++; // Force avatar reload
-                      });
-                    }
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 8, right: 15),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 60,
-                          height: 60,
-                          child: ClipOval(
-                            child: avatarUrl != null
-                                ? Image.network(
-                                    avatarUrl,
-                                    key: ValueKey('${avatarUrl}_$_avatarRefreshKey'),
-                                    fit: BoxFit.cover,
-                                    width: 60,
-                                    height: 60,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      print('[AdminScreen] Error loading avatar: $error');
-                                      print('[AdminScreen] Avatar URL: $avatarUrl');
-                                      return Image.asset(
-                                        'assets/img/sample/placeholder.png',
-                                        fit: BoxFit.cover,
-                                        width: 60,
-                                        height: 60,
-                                      );
-                                    },
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) return child;
-                                      return Image.asset(
-                                        'assets/img/sample/placeholder.png',
-                                        fit: BoxFit.cover,
-                                        width: 60,
-                                        height: 60,
-                                      );
-                                    },
-                                  )
-                                : Image.asset(
-                                    'assets/img/sample/placeholder.png',
-                                    fit: BoxFit.cover,
-                                    width: 60,
-                                    height: 60,
-                                  ),
-                          ),
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            TitleText(
-                              profile?.fullName ?? 'Admin',
-                              fontSize: 18,
-                              color: AppColors.titleColor,
-                            ),
-                            PrimaryText(
-                              profile?.email ?? '',
-                              fontSize: 14,
-                              color: AppColors.secondaryTextColor,
-                            )
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                IconButton(
+                  icon: Icon(Icons.arrow_back, color: AppColors.titleColor),
+                  onPressed: () => Navigator.pop(context),
                 ),
                 Expanded(
                   child: SizedBox(),
