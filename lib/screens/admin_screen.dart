@@ -1927,57 +1927,74 @@ class _AdminScreenState extends State<AdminScreen> {
                 Expanded(
                   child: SizedBox(),
                 ),
-                Row(
-                  children: [
-                    InkWell(
-                      onTap: () {
-                        _showYieldModal();
-                      },
-                      borderRadius: BorderRadius.all(Radius.circular(25)),
-                      highlightColor: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Icon(Icons.percent_rounded, size: 29, color: AppColors.primaryColor),
-                      ),
+                Theme(
+                  data: Theme.of(context).copyWith(
+                    popupMenuTheme: PopupMenuThemeData(
+                      color: AppColors.secondaryColor,
                     ),
-                    
-                    InkWell(
-                      onTap: () {
-                        _showDepositModal();
-                      },
-                      borderRadius: BorderRadius.all(Radius.circular(25)),
-                      highlightColor: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Icon(Icons.account_balance_wallet, size: 29, color: AppColors.primaryColor),
+                  ),
+                  child: PopupMenuButton<String>(
+                    icon: Icon(Icons.menu, color: AppColors.titleColor, size: 28),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'yield':
+                          _showYieldModal();
+                          break;
+                        case 'deposit':
+                          _showDepositModal();
+                          break;
+                        case 'withdraw':
+                          _showWithdrawModal();
+                          break;
+                        case 'create_user':
+                          Navigator.pushNamed(context, CreateUserScreen.routeName);
+                          break;
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => [
+                      PopupMenuItem<String>(
+                        value: 'yield',
+                        child: Row(
+                          children: [
+                            Icon(Icons.percent_rounded, color: AppColors.primaryColor, size: 20),
+                            const SizedBox(width: 12),
+                            const Text('Apply Yield'),
+                          ],
+                        ),
                       ),
-                    ),
-                    
-                    InkWell(
-                      onTap: () {
-                        _showWithdrawModal();
-                      },
-                      borderRadius: BorderRadius.all(Radius.circular(25)),
-                      highlightColor: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Icon(Icons.account_balance_wallet_outlined, size: 29, color: Colors.red.shade700),
+                      PopupMenuItem<String>(
+                        value: 'deposit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.account_balance_wallet, color: AppColors.primaryColor, size: 20),
+                            const SizedBox(width: 12),
+                            const Text('Apply Deposit'),
+                          ],
+                        ),
                       ),
-                    ),
-                    
-                    InkWell(
-                      onTap: () {
-                        Navigator.pushNamed(context, CreateUserScreen.routeName);
-                      },
-                      borderRadius: BorderRadius.all(Radius.circular(25)),
-                      highlightColor: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Icon(Icons.person_add_alt_rounded, size: 29, color: AppColors.primaryColor),
+                      PopupMenuItem<String>(
+                        value: 'withdraw',
+                        child: Row(
+                          children: [
+                            Icon(Icons.account_balance_wallet_outlined, color: Colors.red.shade700, size: 20),
+                            const SizedBox(width: 12),
+                            const Text('Apply Withdraw'),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                )
+                      PopupMenuItem<String>(
+                        value: 'create_user',
+                        child: Row(
+                          children: [
+                            Icon(Icons.person_add_alt_rounded, color: AppColors.primaryColor, size: 20),
+                            const SizedBox(width: 12),
+                            const Text('Create new User'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
