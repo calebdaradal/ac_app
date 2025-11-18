@@ -7,9 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 import '../services/pin_storage.dart';
 import '../services/user_profile_service.dart';
+import '../services/notification_service.dart';
 import 'admin_screen.dart';
 import 'welcome_screen.dart';
 import 'vehicles/asc_screen.dart';
@@ -42,6 +44,24 @@ class _HomeScreenState extends State<HomeScreen> {
       final profileService = UserProfileService();
       if (profileService.profile == null) {
         await profileService.loadProfile();
+      }
+      
+      // Ensure device token is registered for the current user
+      // This is a safety measure in case token registration failed during PIN unlock
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user != null) {
+          final deviceState = await OneSignal.User.pushSubscription.id;
+          if (deviceState != null) {
+            print('[HomeScreen] Ensuring device token is registered for user ${user.id}');
+            await NotificationService().storeDeviceToken(deviceState);
+          } else {
+            print('[HomeScreen] ⚠️ Device token not available yet');
+          }
+        }
+      } catch (e) {
+        print('[HomeScreen] Error ensuring device token registration: $e');
+        // Don't show error to user - notifications are optional
       }
     } catch (e) {
       print('[HomeScreen] Error loading profile: $e');
@@ -100,11 +120,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _signOut(BuildContext context) async {
+    // Remove device token BEFORE signing out (so we have the user ID)
+    try {
+      await NotificationService().removeDeviceToken();
+    } catch (e) {
+      print('[HomeScreen] Error removing device token: $e');
+      // Continue with logout even if token removal fails
+    }
+    
+    // Sign out from Supabase
     await Supabase.instance.client.auth.signOut();
+    
     // Clear all cached data to prevent cross-user authentication issues
     await PinStorage.clearPin();
     await PinStorage.clearUid();
     await UserProfileService().clearProfile();
+    
     if (context.mounted) {
       Navigator.pushNamedAndRemoveUntil(
         context,

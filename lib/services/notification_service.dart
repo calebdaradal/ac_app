@@ -96,6 +96,7 @@ class NotificationService {
 
   /// Store device token in Supabase device_tokens table
   /// Called automatically when token is obtained or updated
+  /// Deactivates old tokens for this device if they belong to a different user
   Future<void> storeDeviceToken(String token) async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -108,16 +109,108 @@ class NotificationService {
       
       print('[NotificationService] Storing device token for user: ${user.id}, platform: $platform');
       
-      await Supabase.instance.client
-          .from('device_tokens')
-          .upsert({
-            'user_id': user.id,
-            'device_token': token,
-            'platform': platform,
-            'is_active': true,
-          }, onConflict: 'device_token');
+      // First, deactivate any old tokens for this device that belong to different users
+      // This prevents notifications from going to the wrong user when switching accounts
+      try {
+        final deactivateResult = await Supabase.instance.client
+            .from('device_tokens')
+            .update({'is_active': false})
+            .eq('device_token', token)
+            .neq('user_id', user.id)
+            .eq('is_active', true)
+            .select();
+        
+        if (deactivateResult.isNotEmpty) {
+          print('[NotificationService] Deactivated ${deactivateResult.length} old token(s) for this device from different user(s)');
+        }
+      } catch (e) {
+        print('[NotificationService] Warning: Could not deactivate old tokens: $e');
+        // Continue anyway
+      }
       
-      print('[NotificationService] ✅ Device token stored successfully');
+      // Try to update first (in case token already exists)
+      // This handles both cases: token exists for this user, or token exists for different user
+      try {
+        final updateResult = await Supabase.instance.client
+            .from('device_tokens')
+            .update({
+              'user_id': user.id,
+              'is_active': true,
+              'platform': platform,
+            })
+            .eq('device_token', token)
+            .select();
+        
+        if (updateResult.isNotEmpty) {
+          print('[NotificationService] ✅ Updated existing token for user ${user.id}');
+          // Verify the update worked
+          final verifyResult = await Supabase.instance.client
+              .from('device_tokens')
+              .select('is_active, user_id')
+              .eq('device_token', token)
+              .eq('user_id', user.id)
+              .single();
+          
+          if (verifyResult['is_active'] == true && verifyResult['user_id'] == user.id) {
+            print('[NotificationService] ✅ Device token updated and verified for user ${user.id}');
+            return; // Success
+          }
+        }
+      } catch (updateError) {
+        print('[NotificationService] Update failed (token might not exist): $updateError');
+        // Continue to try insert
+      }
+      
+      // If update didn't work (token doesn't exist), try to insert
+      try {
+        await Supabase.instance.client
+            .from('device_tokens')
+            .insert({
+              'user_id': user.id,
+              'device_token': token,
+              'platform': platform,
+              'is_active': true,
+            });
+        print('[NotificationService] ✅ Inserted new token for user ${user.id}');
+      } catch (insertError) {
+        // If insert fails with duplicate key, token exists but update didn't work
+        // This shouldn't happen, but handle it gracefully
+        if (insertError.toString().contains('duplicate key') || insertError.toString().contains('23505')) {
+          print('[NotificationService] ⚠️ Token exists but update failed, trying update again...');
+          // Try update one more time
+          try {
+            await Supabase.instance.client
+                .from('device_tokens')
+                .update({
+                  'user_id': user.id,
+                  'is_active': true,
+                  'platform': platform,
+                })
+                .eq('device_token', token);
+            print('[NotificationService] ✅ Updated token on retry');
+            return;
+          } catch (retryError) {
+            print('[NotificationService] ❌ Both insert and update failed: $retryError');
+            throw insertError; // Re-throw original error
+          }
+        } else {
+          throw insertError; // Re-throw if it's a different error
+        }
+      }
+      
+      // Verify the token was stored/updated correctly
+      final verifyResult = await Supabase.instance.client
+          .from('device_tokens')
+          .select('is_active, user_id')
+          .eq('device_token', token)
+          .eq('user_id', user.id)
+          .single();
+      
+      if (verifyResult['is_active'] == true && verifyResult['user_id'] == user.id) {
+        print('[NotificationService] ✅ Device token stored and verified for user ${user.id}');
+      } else {
+        print('[NotificationService] ⚠️ Device token stored but verification failed: $verifyResult');
+      }
     } catch (e) {
       print('[NotificationService] ❌ Error storing device token: $e');
       // Don't throw - token storage failure shouldn't break the app
@@ -125,25 +218,36 @@ class NotificationService {
   }
 
   /// Remove device token when user logs out
+  /// Deactivates ALL device tokens for the current user
   Future<void> removeDeviceToken() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        print('[NotificationService] No authenticated user, cannot remove device tokens');
+        return;
+      }
 
-      // Get current device token
+      // Get current device token (for logging)
       final deviceState = await OneSignal.User.pushSubscription.id;
-      if (deviceState == null) return;
-
-      // Mark token as inactive in database
-      await Supabase.instance.client
+      
+      // Deactivate ALL device tokens for this user (not just current device)
+      // This ensures no notifications are sent to old sessions
+      final result = await Supabase.instance.client
           .from('device_tokens')
           .update({'is_active': false})
           .eq('user_id', user.id)
-          .eq('device_token', deviceState);
+          .eq('is_active', true)
+          .select();
       
-      print('[NotificationService] ✅ Device token deactivated');
+      final deactivatedCount = result.length;
+      print('[NotificationService] ✅ Deactivated $deactivatedCount device token(s) for user ${user.id}');
+      
+      if (deviceState != null) {
+        print('[NotificationService] Current device token: $deviceState');
+      }
     } catch (e) {
-      print('[NotificationService] ❌ Error removing device token: $e');
+      print('[NotificationService] ❌ Error removing device tokens: $e');
+      // Don't throw - allow logout to continue even if token removal fails
     }
   }
 
