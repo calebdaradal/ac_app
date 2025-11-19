@@ -133,13 +133,10 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
           appliedDate: appliedDate,
         );
 
-        // Update transaction status to VERIFIED and applied_at date
-        await TransactionService.updateTransactionStatus(
+        // Update transaction status to VERIFIED and applied_at date (combined to prevent duplicate webhook triggers)
+        await TransactionService.updateTransactionStatusAndDate(
           transactionId: transactionId,
           status: TransactionStatus.verified,
-        );
-        await TransactionService.updateTransactionAppliedDate(
-          transactionId: transactionId,
           appliedDate: appliedDate,
         );
       } else if (isWithdrawal) {
@@ -179,13 +176,10 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
             })
             .eq('id', userVehicle['id']);
 
-        // Update transaction status to ISSUED and applied_at date
-        await TransactionService.updateTransactionStatus(
+        // Update transaction status to ISSUED and applied_at date (combined to prevent duplicate webhook triggers)
+        await TransactionService.updateTransactionStatusAndDate(
           transactionId: transactionId,
           status: TransactionStatus.issued,
-        );
-        await TransactionService.updateTransactionAppliedDate(
-          transactionId: transactionId,
           appliedDate: appliedDate,
         );
       }
