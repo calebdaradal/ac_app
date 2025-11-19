@@ -30,7 +30,6 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
   double? _currentBalance;
   double _feeAmount = 0.0;
   double _totalAmount = 0.0;
-  bool _isWithdrawalAllowed = true;
 
   @override
   void initState() {
@@ -38,26 +37,6 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
     _amountController.text = '0.00';
     _amountController.addListener(_calculateFee);
     _loadBankDetails();
-    _checkWithdrawalAvailability();
-  }
-
-  Future<void> _checkWithdrawalAvailability() async {
-    try {
-      final isAllowed = await AdminSettingsService.isWithdrawalAllowed();
-      if (mounted) {
-        setState(() {
-          _isWithdrawalAllowed = isAllowed;
-        });
-      }
-    } catch (e) {
-      print('[WithdrawScreen] Error checking withdrawal availability: $e');
-      // If there's an error, allow withdrawal by default
-      if (mounted) {
-        setState(() {
-          _isWithdrawalAllowed = true;
-        });
-      }
-    }
   }
 
   @override
@@ -146,6 +125,26 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
   }
 
   Future<void> _handleWithdrawal() async {
+    // Failsafe check: Verify withdrawal is still allowed before processing
+    try {
+      final isAllowed = await AdminSettingsService.isWithdrawalAllowed();
+      if (!isAllowed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Withdrawals are not available at this time. The annual withdraw date has passed.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        // Navigate back to vehicle screen
+        Navigator.pop(context);
+        return;
+      }
+    } catch (e) {
+      print('[WithdrawScreen] Error checking withdrawal availability: $e');
+      // Continue with withdrawal if check fails (fail open)
+    }
+
     // Check if bank details are complete
     if (_bankDetails == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -402,12 +401,7 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                         children: [
                           Expanded(
                             child: StyledButton(
-                              backgroundColor: _isWithdrawalAllowed 
-                                  ? null 
-                                  : Colors.grey,
-                              onPressed: (_submitting || !_isWithdrawalAllowed) 
-                                  ? null 
-                                  : _handleWithdrawal,
+                              onPressed: _submitting ? null : _handleWithdrawal,
                               child: _submitting
                                   ? const SizedBox(
                                       height: 20,
@@ -417,11 +411,7 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : PrimaryTextW(
-                                      _isWithdrawalAllowed 
-                                          ? 'Withdrawal' 
-                                          : 'Withdraw not Available',
-                                    ),
+                                  : PrimaryTextW('Withdrawal'),
                             ),
                           ),
                         ],

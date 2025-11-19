@@ -2369,27 +2369,6 @@ class _AdminScreenState extends State<AdminScreen> {
 
     try {
       final supabase = Supabase.instance.client;
-      final userId = _selectedUser!.uid;
-      
-      print('[AdminScreen] Updating user profile for ID: $userId (type: ${userId.runtimeType})');
-      print('[AdminScreen] First Name: ${_firstNameController.text.trim()}');
-      print('[AdminScreen] Last Name: ${_lastNameController.text.trim()}');
-      print('[AdminScreen] Email: ${_emailController.text.trim()}');
-      
-      // First, verify the user exists and we can read it
-      final checkUser = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name, email')
-          .eq('id', userId)
-          .maybeSingle();
-      
-      print('[AdminScreen] User check before update: $checkUser');
-      
-      if (checkUser == null) {
-        throw Exception('User not found with ID: $userId');
-      }
-      
-      // Update profile using the id column - use simple update without select first
       await supabase
           .from('profiles')
           .update({
@@ -2397,34 +2376,10 @@ class _AdminScreenState extends State<AdminScreen> {
             'last_name': _lastNameController.text.trim(),
             'email': _emailController.text.trim(),
           })
-          .eq('id', userId);
-      
-      print('[AdminScreen] Update query executed');
+          .eq('id', _selectedUser!.uid);
 
-      // Verify the update worked by fetching the updated profile
-      final verifyResponse = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name, email')
-          .eq('id', userId)
-          .maybeSingle();
-      
-      print('[AdminScreen] Verified update: $verifyResponse');
-      
-      if (verifyResponse == null) {
-        throw Exception('Could not verify update - profile not found after update');
-      }
-      
-      // Check if values actually changed
-      final firstNameChanged = verifyResponse['first_name'] != _firstNameController.text.trim();
-      final lastNameChanged = verifyResponse['last_name'] != _lastNameController.text.trim();
-      final emailChanged = verifyResponse['email'] != _emailController.text.trim();
-      
-      if (firstNameChanged || lastNameChanged || emailChanged) {
-        print('[AdminScreen] WARNING: Values may not have updated correctly');
-        print('[AdminScreen] Expected first_name: ${_firstNameController.text.trim()}, Got: ${verifyResponse['first_name']}');
-        print('[AdminScreen] Expected last_name: ${_lastNameController.text.trim()}, Got: ${verifyResponse['last_name']}');
-        print('[AdminScreen] Expected email: ${_emailController.text.trim()}, Got: ${verifyResponse['email']}');
-      }
+      // Note: Email update in auth.users table requires admin privileges
+      // The email in profiles table is updated, which is what's displayed in the app
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2437,29 +2392,19 @@ class _AdminScreenState extends State<AdminScreen> {
         // Reload users to get updated data
         await _loadUsers();
         
-        // Update selected user with the verified data
+        // Update selected user
         final updatedUser = _allUsers.firstWhere(
-          (u) => u.uid == userId,
-          orElse: () => UserProfile(
-            uid: userId,
-            firstName: verifyResponse['first_name'] as String?,
-            lastName: verifyResponse['last_name'] as String?,
-            email: verifyResponse['email'] as String? ?? '',
-            avatarUrl: _selectedUser!.avatarUrl,
-            isAdmin: _selectedUser!.isAdmin,
-          ),
+          (u) => u.uid == _selectedUser!.uid,
+          orElse: () => _selectedUser!,
         );
         _onUserSelected(updatedUser);
       }
     } catch (e) {
-      print('[AdminScreen] Error updating user profile: $e');
-      print('[AdminScreen] Stack trace: ${StackTrace.current}');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating user: $e'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
           ),
         );
       }
