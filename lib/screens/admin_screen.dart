@@ -153,12 +153,10 @@ class _AdminScreenState extends State<AdminScreen> {
             })
             .eq('id', userVehicle['id']);
 
-        await TransactionService.updateTransactionStatus(
+        // Update transaction status and date together (prevents duplicate webhook triggers)
+        await TransactionService.updateTransactionStatusAndDate(
           transactionId: transaction.id,
           status: TransactionStatus.issued,
-        );
-        await TransactionService.updateTransactionAppliedDate(
-          transactionId: transaction.id,
           appliedDate: appliedDate,
         );
       } else {
@@ -170,12 +168,10 @@ class _AdminScreenState extends State<AdminScreen> {
           appliedDate: appliedDate,
         );
 
-        await TransactionService.updateTransactionStatus(
+        // Update transaction status and date together (prevents duplicate webhook triggers)
+        await TransactionService.updateTransactionStatusAndDate(
           transactionId: transaction.id,
           status: TransactionStatus.verified,
-        );
-        await TransactionService.updateTransactionAppliedDate(
-          transactionId: transaction.id,
           appliedDate: appliedDate,
         );
       }

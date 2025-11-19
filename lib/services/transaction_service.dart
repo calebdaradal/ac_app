@@ -97,6 +97,34 @@ class TransactionService {
     }
   }
 
+  /// Update transaction status and applied_at date together (for admin verification)
+  /// This prevents duplicate webhook triggers by combining both updates into one
+  static Future<void> updateTransactionStatusAndDate({
+    required int transactionId,
+    required String status,
+    required DateTime appliedDate,
+  }) async {
+    print('[TransactionService] Updating transaction $transactionId: status=$status, applied_at=$appliedDate');
+
+    final response = await _supabase
+        .from('usertransactions')
+        .update({
+          'status': status,
+          'applied_at': appliedDate.toIso8601String().split('T')[0],
+        })
+        .eq('id', transactionId)
+        .select('id, status, applied_at')
+        .single();
+
+    print('[TransactionService] Transaction status and date updated successfully');
+    print('[TransactionService] Updated transaction: $response');
+    
+    // Verify the update was successful
+    if (response['status'] != status) {
+      throw Exception('Failed to update transaction status. Expected: $status, Got: ${response['status']}');
+    }
+  }
+
   /// Update transaction applied_at date (for admin when approving)
   static Future<void> updateTransactionAppliedDate({
     required int transactionId,
