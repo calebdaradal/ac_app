@@ -62,7 +62,10 @@ class AdminSettingsService {
   }
 
   /// Check if withdrawals are currently allowed based on annual withdraw date
-  /// Returns true if current date >= annual_withdraw_date, or if no date is set
+  /// Logic: Users can withdraw UNTIL the annual withdraw date each year
+  /// After that date passes, withdrawals are blocked until the next year
+  /// Example: If date is March 15, users can withdraw Jan 1 - March 15 each year
+  /// After March 15, withdrawals are blocked until January 1 of next year
   static Future<bool> isWithdrawalAllowed() async {
     final annualDate = await getAnnualWithdrawDate();
     if (annualDate == null) {
@@ -72,9 +75,19 @@ class AdminSettingsService {
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final withdrawDate = DateTime(annualDate.year, annualDate.month, annualDate.day);
-
-    return today.isAfter(withdrawDate) || today.isAtSameMomentAs(withdrawDate);
+    
+    // Extract month and day from the annual withdraw date (ignore the year it was set)
+    // This allows the date to repeat annually
+    final annualMonth = annualDate.month;
+    final annualDay = annualDate.day;
+    
+    // Create the withdraw deadline for the current year
+    final withdrawDeadlineThisYear = DateTime(now.year, annualMonth, annualDay);
+    
+    // Users can withdraw if today is on or before the annual withdraw date in the current year
+    // After the date passes, withdrawals are blocked until January 1 of the next year
+    // (when the cycle resets and they can withdraw again until the deadline)
+    return today.isBefore(withdrawDeadlineThisYear) || today.isAtSameMomentAs(withdrawDeadlineThisYear);
   }
 }
 
