@@ -1,6 +1,7 @@
 import 'package:ac_app/services/bank_details_service.dart';
 import 'package:ac_app/services/transaction_service.dart';
 import 'package:ac_app/services/user_profile_service.dart';
+import 'package:ac_app/services/admin_settings_service.dart';
 import 'package:ac_app/constants/transaction_constants.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_card.dart';
@@ -29,6 +30,7 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
   double? _currentBalance;
   double _feeAmount = 0.0;
   double _totalAmount = 0.0;
+  bool _isWithdrawalAllowed = true;
 
   @override
   void initState() {
@@ -36,6 +38,26 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
     _amountController.text = '0.00';
     _amountController.addListener(_calculateFee);
     _loadBankDetails();
+    _checkWithdrawalAvailability();
+  }
+
+  Future<void> _checkWithdrawalAvailability() async {
+    try {
+      final isAllowed = await AdminSettingsService.isWithdrawalAllowed();
+      if (mounted) {
+        setState(() {
+          _isWithdrawalAllowed = isAllowed;
+        });
+      }
+    } catch (e) {
+      print('[WithdrawScreen] Error checking withdrawal availability: $e');
+      // If there's an error, allow withdrawal by default
+      if (mounted) {
+        setState(() {
+          _isWithdrawalAllowed = true;
+        });
+      }
+    }
   }
 
   @override
@@ -380,7 +402,12 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                         children: [
                           Expanded(
                             child: StyledButton(
-                              onPressed: _submitting ? null : _handleWithdrawal,
+                              backgroundColor: _isWithdrawalAllowed 
+                                  ? null 
+                                  : Colors.grey,
+                              onPressed: (_submitting || !_isWithdrawalAllowed) 
+                                  ? null 
+                                  : _handleWithdrawal,
                               child: _submitting
                                   ? const SizedBox(
                                       height: 20,
@@ -390,7 +417,11 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : PrimaryTextW('Withdrawal'),
+                                  : PrimaryTextW(
+                                      _isWithdrawalAllowed 
+                                          ? 'Withdrawal' 
+                                          : 'Withdraw not Available',
+                                    ),
                             ),
                           ),
                         ],

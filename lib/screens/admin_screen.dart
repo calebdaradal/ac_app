@@ -6,6 +6,7 @@ import 'package:ac_app/services/investment_service.dart';
 import 'package:ac_app/services/yield_service.dart';
 import 'package:ac_app/services/deposit_service.dart';
 import 'package:ac_app/services/withdrawal_service.dart';
+import 'package:ac_app/services/admin_settings_service.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/success_dialog.dart';
 import 'package:flutter/material.dart';
@@ -95,6 +96,68 @@ class _AdminScreenState extends State<AdminScreen> {
       },
     );
     return picked;
+  }
+
+  Future<void> _showAnnualWithdrawDatePicker() async {
+    // Load current annual withdraw date
+    DateTime? currentDate;
+    try {
+      currentDate = await AdminSettingsService.getAnnualWithdrawDate();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading current date: $e')),
+        );
+      }
+      return;
+    }
+
+    // Show date picker
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: currentDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      helpText: 'Select Annual Withdraw Date',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppColors.titleColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      // Save the selected date
+      try {
+        await AdminSettingsService.updateAnnualWithdrawDate(picked);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Annual withdraw date set to ${DateFormat('MMM dd, yyyy').format(picked)}',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error saving date: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _approveTransaction(UserTransaction transaction) async {
@@ -1989,6 +2052,34 @@ class _AdminScreenState extends State<AdminScreen> {
                             Icon(Icons.person_add_alt_rounded, color: AppColors.primaryColor, size: 20),
                             const SizedBox(width: 12),
                             const Text('Create new User'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Theme(
+                  data: Theme.of(context).copyWith(
+                    popupMenuTheme: PopupMenuThemeData(
+                      color: AppColors.secondaryColor,
+                    ),
+                  ),
+                  child: PopupMenuButton<String>(
+                    icon: Icon(Icons.settings, color: AppColors.titleColor, size: 28),
+                    onSelected: (value) {
+                      if (value == 'annual_withdraw_date') {
+                        _showAnnualWithdrawDatePicker();
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => [
+                      PopupMenuItem<String>(
+                        value: 'annual_withdraw_date',
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, color: AppColors.primaryColor, size: 20),
+                            const SizedBox(width: 12),
+                            const Text('Apply Annual Withdraw Date'),
                           ],
                         ),
                       ),
