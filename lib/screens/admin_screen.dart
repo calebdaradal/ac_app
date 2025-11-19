@@ -7,12 +7,18 @@ import 'package:ac_app/services/yield_service.dart';
 import 'package:ac_app/services/deposit_service.dart';
 import 'package:ac_app/services/withdrawal_service.dart';
 import 'package:ac_app/services/admin_settings_service.dart';
+import 'package:ac_app/services/avatar_service.dart';
 import 'package:ac_app/shared/styled_button.dart';
+import 'package:ac_app/shared/styled_textfield.dart';
 import 'package:ac_app/shared/success_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
+import 'dart:io';
+import 'dart:typed_data';
 import '../services/user_profile_service.dart';
 import 'create_user_screen.dart';
 
@@ -30,11 +36,34 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _loading = true;
   Set<int> _expandedCards = {};
   Set<int> _processingIds = {};
+  String _currentView = 'transactions'; // 'transactions' or 'manage_users'
+  
+  // Manage Users state
+  List<UserProfile> _allUsers = [];
+  UserProfile? _selectedUser;
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _emailController = TextEditingController();
+  String? _avatarUrl;
+  int _avatarRefreshKey = 0;
+  bool _isLoadingUsers = false;
+  bool _isUpdatingUser = false;
+  bool _isUploadingAvatar = false;
+  final ImagePicker _imagePicker = ImagePicker();
+  final AvatarService _avatarService = AvatarService();
 
   @override
   void initState() {
     super.initState();
     _loadTransactions();
+  }
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTransactions() async {
@@ -1981,7 +2010,20 @@ class _AdminScreenState extends State<AdminScreen> {
               children: [
                 IconButton(
                   icon: Icon(Icons.arrow_back, color: AppColors.titleColor),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    if (_currentView == 'manage_users') {
+                      setState(() {
+                        _currentView = 'transactions';
+                        _selectedUser = null;
+                        _firstNameController.clear();
+                        _lastNameController.clear();
+                        _emailController.clear();
+                        _avatarUrl = null;
+                      });
+                    } else {
+                      Navigator.pop(context);
+                    }
+                  },
                 ),
                 Expanded(
                   child: SizedBox(),
@@ -2007,6 +2049,9 @@ class _AdminScreenState extends State<AdminScreen> {
                           break;
                         case 'create_user':
                           Navigator.pushNamed(context, CreateUserScreen.routeName);
+                          break;
+                        case 'manage_users':
+                          _switchToManageUsers();
                           break;
                       }
                     },
@@ -2051,6 +2096,16 @@ class _AdminScreenState extends State<AdminScreen> {
                           ],
                         ),
                       ),
+                      PopupMenuItem<String>(
+                        value: 'manage_users',
+                        child: Row(
+                          children: [
+                            Icon(Icons.people, color: AppColors.primaryColor, size: 20),
+                            const SizedBox(width: 12),
+                            const Text('Manage Users'),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2089,34 +2144,461 @@ class _AdminScreenState extends State<AdminScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadTransactions,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          : _currentView == 'manage_users'
+              ? _buildManageUsersView()
+              : RefreshIndicator(
+                  onRefresh: _loadTransactions,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Withdrawals Section
+                        TitleText('Withdrawals', fontSize: 20, color: AppColors.titleColor),
+                        const SizedBox(height: 12),
+                        if (_withdrawals.isEmpty)
+                          _buildEmptyState('No pending withdrawals')
+                        else
+                          ..._withdrawals.map((t) => _buildTransactionCard(t)).toList(),
+                        
+                        const SizedBox(height: 32),
+                        
+                        // Deposits Section
+                        TitleText('Deposits', fontSize: 20, color: AppColors.titleColor),
+                        const SizedBox(height: 12),
+                        if (_deposits.isEmpty)
+                          _buildEmptyState('No pending deposits')
+                        else
+                          ..._deposits.map((t) => _buildTransactionCard(t)).toList(),
+                      ],
+                    ),
+                  ),
+                ),
+    );
+  }
+
+  Future<void> _switchToManageUsers() async {
+    setState(() {
+      _currentView = 'manage_users';
+    });
+    await _loadUsers();
+  }
+
+  Future<void> _loadUsers() async {
+    setState(() => _isLoadingUsers = true);
+    try {
+      final users = await DepositService.getAllUsers();
+      if (mounted) {
+        setState(() {
+          _allUsers = users;
+          _isLoadingUsers = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingUsers = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading users: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _onUserSelected(UserProfile? user) async {
+    if (user == null) {
+      setState(() {
+        _selectedUser = null;
+        _firstNameController.clear();
+        _lastNameController.clear();
+        _emailController.clear();
+        _avatarUrl = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedUser = user;
+      _firstNameController.text = user.firstName ?? '';
+      _lastNameController.text = user.lastName ?? '';
+      _emailController.text = user.email;
+      _avatarUrl = user.avatarUrl;
+      _avatarRefreshKey++;
+    });
+  }
+
+  Future<void> _pickAndUploadAvatar() async {
+    if (_selectedUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a user first')),
+      );
+      return;
+    }
+
+    try {
+      // Show image source selection dialog
+      final ImageSource? source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Select Image Source'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-                    // Withdrawals Section
-                    TitleText('Withdrawals', fontSize: 20, color: AppColors.titleColor),
-              const SizedBox(height: 12),
-                    if (_withdrawals.isEmpty)
-                      _buildEmptyState('No pending withdrawals')
-                    else
-                      ..._withdrawals.map((t) => _buildTransactionCard(t)).toList(),
-                    
-                    const SizedBox(height: 32),
-                    
-                    // Deposits Section
-                    TitleText('Deposits', fontSize: 20, color: AppColors.titleColor),
-              const SizedBox(height: 12),
-                    if (_deposits.isEmpty)
-                      _buildEmptyState('No pending deposits')
-                    else
-                      ..._deposits.map((t) => _buildTransactionCard(t)).toList(),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Photo Library'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
             ],
           ),
         ),
+      );
+      
+      if (source == null) return;
+      
+      // Pick image
+      final XFile? pickedFile = await _imagePicker.pickImage(source: source);
+      if (pickedFile == null) return;
+      
+      // Read original image file
+      final Uint8List originalBytes = await pickedFile.readAsBytes();
+      print('[AdminScreen] Original image file size: ${originalBytes.length} bytes');
+      
+      // Decode image
+      final img.Image? originalImage = img.decodeImage(originalBytes);
+      if (originalImage == null) {
+        throw Exception('Failed to decode image');
+      }
+      
+      print('[AdminScreen] Original image dimensions: ${originalImage.width}x${originalImage.height}');
+      
+      // Crop to 1:1 aspect ratio (square) - center crop
+      final int size = originalImage.width < originalImage.height 
+          ? originalImage.width 
+          : originalImage.height;
+      final int x = (originalImage.width - size) ~/ 2;
+      final int y = (originalImage.height - size) ~/ 2;
+      
+      final img.Image croppedImage = img.copyCrop(
+        originalImage,
+        x: x,
+        y: y,
+        width: size,
+        height: size,
+      );
+      
+      // Resize to max 800x800
+      final int targetSize = size > 800 ? 800 : size;
+      final img.Image resizedImage = img.copyResize(
+        croppedImage,
+        width: targetSize,
+        height: targetSize,
+        interpolation: img.Interpolation.cubic,
+      );
+      
+      // Encode to PNG
+      final Uint8List pngBytes = Uint8List.fromList(img.encodePng(resizedImage));
+      
+      // Save to temporary file
+      final Directory tempDir = Directory.systemTemp;
+      final String tempPath = '${tempDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}.png';
+      final File imageFile = File(tempPath);
+      await imageFile.writeAsBytes(pngBytes);
+      
+      setState(() => _isUploadingAvatar = true);
+      
+      // Upload avatar
+      final avatarUrl = await _avatarService.uploadAvatar(imageFile, _selectedUser!.uid);
+      print('[AdminScreen] Avatar uploaded, URL: $avatarUrl');
+      
+      // Update profile in database
+      await _avatarService.updateProfileAvatarUrl(_selectedUser!.uid, avatarUrl);
+      
+      // Clean up temporary file
+      try {
+        if (await imageFile.exists()) await imageFile.delete();
+      } catch (e) {
+        print('[AdminScreen] Warning: Could not delete temp file: $e');
+      }
+      
+      // Update UI
+      if (mounted) {
+        setState(() {
+          _isUploadingAvatar = false;
+          _avatarUrl = avatarUrl;
+          _avatarRefreshKey++;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Avatar updated successfully!')),
+        );
+      }
+    } catch (e) {
+      setState(() => _isUploadingAvatar = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading avatar: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateUserProfile() async {
+    if (_selectedUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a user first')),
+      );
+      return;
+    }
+
+    if (_firstNameController.text.trim().isEmpty ||
+        _lastNameController.text.trim().isEmpty ||
+        _emailController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+
+    setState(() => _isUpdatingUser = true);
+
+    try {
+      final supabase = Supabase.instance.client;
+      final userId = _selectedUser!.uid;
+      
+      print('[AdminScreen] Updating user profile for ID: $userId (type: ${userId.runtimeType})');
+      print('[AdminScreen] First Name: ${_firstNameController.text.trim()}');
+      print('[AdminScreen] Last Name: ${_lastNameController.text.trim()}');
+      print('[AdminScreen] Email: ${_emailController.text.trim()}');
+      
+      // First, verify the user exists and we can read it
+      final checkUser = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .eq('id', userId)
+          .maybeSingle();
+      
+      print('[AdminScreen] User check before update: $checkUser');
+      
+      if (checkUser == null) {
+        throw Exception('User not found with ID: $userId');
+      }
+      
+      // Update profile using the id column - use simple update without select first
+      await supabase
+          .from('profiles')
+          .update({
+            'first_name': _firstNameController.text.trim(),
+            'last_name': _lastNameController.text.trim(),
+            'email': _emailController.text.trim(),
+          })
+          .eq('id', userId);
+      
+      print('[AdminScreen] Update query executed');
+
+      // Verify the update worked by fetching the updated profile
+      final verifyResponse = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .eq('id', userId)
+          .maybeSingle();
+      
+      print('[AdminScreen] Verified update: $verifyResponse');
+      
+      if (verifyResponse == null) {
+        throw Exception('Could not verify update - profile not found after update');
+      }
+      
+      // Check if values actually changed
+      final firstNameChanged = verifyResponse['first_name'] != _firstNameController.text.trim();
+      final lastNameChanged = verifyResponse['last_name'] != _lastNameController.text.trim();
+      final emailChanged = verifyResponse['email'] != _emailController.text.trim();
+      
+      if (firstNameChanged || lastNameChanged || emailChanged) {
+        print('[AdminScreen] WARNING: Values may not have updated correctly');
+        print('[AdminScreen] Expected first_name: ${_firstNameController.text.trim()}, Got: ${verifyResponse['first_name']}');
+        print('[AdminScreen] Expected last_name: ${_lastNameController.text.trim()}, Got: ${verifyResponse['last_name']}');
+        print('[AdminScreen] Expected email: ${_emailController.text.trim()}, Got: ${verifyResponse['email']}');
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('User profile updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Reload users to get updated data
+        await _loadUsers();
+        
+        // Update selected user with the verified data
+        final updatedUser = _allUsers.firstWhere(
+          (u) => u.uid == userId,
+          orElse: () => UserProfile(
+            uid: userId,
+            firstName: verifyResponse['first_name'] as String?,
+            lastName: verifyResponse['last_name'] as String?,
+            email: verifyResponse['email'] as String? ?? '',
+            avatarUrl: _selectedUser!.avatarUrl,
+            isAdmin: _selectedUser!.isAdmin,
+          ),
+        );
+        _onUserSelected(updatedUser);
+      }
+    } catch (e) {
+      print('[AdminScreen] Error updating user profile: $e');
+      print('[AdminScreen] Stack trace: ${StackTrace.current}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating user: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingUser = false);
+      }
+    }
+  }
+
+  Widget _buildManageUsersView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TitleText('Manage Users', fontSize: 24, color: AppColors.titleColor),
+          const SizedBox(height: 24),
+          
+          // User selector dropdown
+          DropdownButtonFormField<UserProfile>(
+            value: _selectedUser,
+            decoration: InputDecoration(
+              labelText: 'Select User',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+            ),
+            items: _allUsers.map((user) {
+              return DropdownMenuItem<UserProfile>(
+                value: user,
+                child: Text('${user.firstName ?? ''} ${user.lastName ?? ''} (${user.email})'),
+              );
+            }).toList(),
+            onChanged: _isLoadingUsers ? null : _onUserSelected,
+          ),
+          
+          if (_isLoadingUsers)
+            const Padding(
+              padding: EdgeInsets.all(20.0),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_selectedUser != null) ...[
+            const SizedBox(height: 32),
+            
+            // Avatar section
+            Center(
+              child: Column(
+                children: [
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 60,
+                        backgroundColor: Colors.grey.shade300,
+                        backgroundImage: _avatarUrl != null
+                            ? NetworkImage('$_avatarUrl?key=$_avatarRefreshKey')
+                            : null,
+                        child: _avatarUrl == null
+                            ? Icon(Icons.person, size: 60, color: Colors.grey.shade600)
+                            : null,
+                      ),
+                      if (_isUploadingAvatar)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Center(
+                              child: CircularProgressIndicator(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  StyledButton(
+                    onPressed: _isUploadingAvatar ? null : _pickAndUploadAvatar,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        PrimaryTextW('Change Profile Picture'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+            
+            // Form fields
+            const SecondaryText('First Name', fontSize: 14),
+            const SizedBox(height: 8),
+            StyledTextfield(
+              controller: _firstNameController,
+              keyboardType: TextInputType.text,
+              label: 'Enter first name',
+            ),
+            const SizedBox(height: 16),
+            
+            const SecondaryText('Last Name', fontSize: 14),
+            const SizedBox(height: 8),
+            StyledTextfield(
+              controller: _lastNameController,
+              keyboardType: TextInputType.text,
+              label: 'Enter last name',
+            ),
+            const SizedBox(height: 16),
+            
+            const SecondaryText('Email', fontSize: 14),
+            const SizedBox(height: 8),
+            StyledTextfield(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              label: 'Enter email',
+            ),
+            const SizedBox(height: 32),
+            
+            // Update button
+            StyledButton(
+              onPressed: _isUpdatingUser ? null : _updateUserProfile,
+              child: _isUpdatingUser
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : PrimaryTextW('Update User Profile'),
+            ),
+          ],
+        ],
       ),
     );
   }
