@@ -2,14 +2,15 @@ import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/theme.dart';
 import 'package:ac_app/constants/transaction_constants.dart';
 import 'package:ac_app/services/transaction_service.dart';
+import 'package:ac_app/services/transaction_history_service.dart';
 import 'package:ac_app/services/investment_service.dart';
 import 'package:ac_app/services/yield_service.dart';
 import 'package:ac_app/services/deposit_service.dart';
 import 'package:ac_app/services/withdrawal_service.dart';
-import 'package:ac_app/services/admin_settings_service.dart';
 import 'package:ac_app/services/avatar_service.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_textfield.dart';
+import 'package:ac_app/shared/styled_card.dart';
 import 'package:ac_app/shared/success_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +22,18 @@ import 'dart:io';
 import 'dart:typed_data';
 import '../services/user_profile_service.dart';
 import 'create_user_screen.dart';
+
+enum TransactionFilter {
+  dateAscending,
+  dateDescending,
+}
+
+enum UserTransactionType {
+  all,
+  yields,
+  transactions,
+  pending,
+}
 
 class AdminScreen extends StatefulWidget {
   static const routeName = '/admin';
@@ -43,6 +56,11 @@ class _AdminScreenState extends State<AdminScreen> {
   UserProfile? _selectedUser;
   bool _isLoadingUsers = false;
   bool _isTogglingUserStatus = false;
+  bool _isLoadingTransactions = false;
+  List<TransactionHistoryItem> _userTransactions = [];
+  List<TransactionHistoryItem> _filteredUserTransactions = [];
+  TransactionFilter _currentUserFilter = TransactionFilter.dateDescending;
+  UserTransactionType _selectedUserType = UserTransactionType.all;
   final ImagePicker _imagePicker = ImagePicker();
   final AvatarService _avatarService = AvatarService();
 
@@ -118,67 +136,6 @@ class _AdminScreenState extends State<AdminScreen> {
     return picked;
   }
 
-  Future<void> _showAnnualWithdrawDatePicker() async {
-    // Load current annual withdraw date
-    DateTime? currentDate;
-    try {
-      currentDate = await AdminSettingsService.getAnnualWithdrawDate();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading current date: $e')),
-        );
-      }
-      return;
-    }
-
-    // Show date picker
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: currentDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-      helpText: 'Select Annual Withdraw Date',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.primaryColor,
-              onPrimary: Colors.white,
-              onSurface: AppColors.titleColor,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      // Save the selected date
-      try {
-        await AdminSettingsService.updateAnnualWithdrawDate(picked);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Annual withdraw date set to ${DateFormat('MMM dd, yyyy').format(picked)}',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error saving date: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
-  }
 
   Future<void> _approveTransaction(UserTransaction transaction) async {
     // Validate required fields
@@ -2097,34 +2054,6 @@ class _AdminScreenState extends State<AdminScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Theme(
-                  data: Theme.of(context).copyWith(
-                    popupMenuTheme: PopupMenuThemeData(
-                      color: AppColors.secondaryColor,
-                    ),
-                  ),
-                  child: PopupMenuButton<String>(
-                    icon: Icon(Icons.settings, color: AppColors.titleColor, size: 28),
-                    onSelected: (value) {
-                      if (value == 'annual_withdraw_date') {
-                        _showAnnualWithdrawDatePicker();
-                      }
-                    },
-                    itemBuilder: (BuildContext context) => [
-                      PopupMenuItem<String>(
-                        value: 'annual_withdraw_date',
-                        child: Row(
-                          children: [
-                            Icon(Icons.calendar_today, color: AppColors.primaryColor, size: 20),
-                            const SizedBox(width: 12),
-                            const Text('Apply Annual Withdraw Date'),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
@@ -2180,16 +2109,34 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       final users = await DepositService.getAllUsers();
       if (mounted) {
+        // Sort users: active users first, then disabled users at the bottom
+        final sortedUsers = List<UserProfile>.from(users);
+        sortedUsers.sort((a, b) {
+          // Active users (isActive == true or null) come first
+          final aActive = a.isActive;
+          final bActive = b.isActive;
+          
+          if (aActive == false && bActive != false) {
+            return 1; // a is disabled, b is active - a goes after b
+          } else if (aActive != false && bActive == false) {
+            return -1; // a is active, b is disabled - a goes before b
+          }
+          // Both same status - sort alphabetically by first name
+          final aName = (a.firstName ?? '').toLowerCase();
+          final bName = (b.firstName ?? '').toLowerCase();
+          return aName.compareTo(bName);
+        });
+        
         // If a user was previously selected, try to find it in the new list by uid
         String? previousUid = _selectedUser?.uid;
         
         setState(() {
-          _allUsers = users;
+          _allUsers = sortedUsers;
           _isLoadingUsers = false;
           
             // If we had a selected user, try to find it in the new list
             if (previousUid != null) {
-              final matchingUser = users.firstWhere(
+              final matchingUser = sortedUsers.firstWhere(
                 (u) => u.uid == previousUid,
                 orElse: () => _selectedUser!,
               );
@@ -2221,13 +2168,153 @@ class _AdminScreenState extends State<AdminScreen> {
     if (user == null) {
       setState(() {
         _selectedUser = null;
+        _userTransactions = [];
       });
       return;
     }
 
     setState(() {
       _selectedUser = user;
+      _userTransactions = [];
     });
+    
+    // Load transaction history for selected user
+    await _loadUserTransactions(user.uid);
+  }
+
+  Future<void> _loadUserTransactions(String userId) async {
+    setState(() => _isLoadingTransactions = true);
+    
+    try {
+      final supabase = Supabase.instance.client;
+      List<TransactionHistoryItem> allTransactions = [];
+      
+      // Fetch all user transactions (deposits and withdrawals) across all vehicles
+      final userTransactionsResponse = await supabase
+          .from('usertransactions')
+          .select('id, transaction_id, amount, status, applied_at, created_at, vehicle_id')
+          .eq('user_uid', userId);
+      
+      for (var trans in userTransactionsResponse) {
+        final transactionTypeId = trans['transaction_id'] as int;
+        final status = trans['status'] as String;
+        final amount = (trans['amount'] as num).toDouble();
+        final appliedAt = DateTime.parse(trans['applied_at'] as String);
+        final createdAtStr = trans['created_at'] as String?;
+        
+        String type;
+        String displayStatus;
+        
+        if (transactionTypeId == 2) {
+          type = 'Deposit';
+          if (status == 'PENDING') {
+            displayStatus = 'Verifying';
+          } else if (status == 'DENIED') {
+            displayStatus = 'Denied';
+          } else if (status == 'VERIFIED') {
+            displayStatus = 'Verified';
+          } else {
+            displayStatus = status;
+          }
+        } else {
+          type = 'Withdrawal';
+          if (status == 'PENDING') {
+            displayStatus = 'Verifying';
+          } else if (status == 'ISSUED') {
+            displayStatus = 'Completed';
+          } else if (status == 'DENIED') {
+            displayStatus = 'Denied';
+          } else {
+            displayStatus = status;
+          }
+        }
+        
+        DateTime actionDate;
+        if (createdAtStr != null && createdAtStr.isNotEmpty) {
+          try {
+            actionDate = DateTime.parse(createdAtStr);
+          } catch (e) {
+            actionDate = appliedAt;
+          }
+        } else {
+          actionDate = appliedAt;
+        }
+        
+        allTransactions.add(TransactionHistoryItem(
+          id: trans['id'] as int,
+          type: type,
+          amount: amount,
+          yieldPercent: null,
+          status: displayStatus,
+          date: appliedAt,
+          actionDate: actionDate,
+          isPositive: type == 'Deposit',
+        ));
+      }
+      
+      // Fetch yield distributions across all vehicles
+      final yieldDistributions = await supabase
+          .from('user_yield_distributions')
+          .select('id, net_yield, gross_yield, balance_before, yield_id, vehicle_id, yields!inner(yield_type, yield_amount, applied_date, created_at)')
+          .eq('user_uid', userId);
+      
+      for (var yieldDist in yieldDistributions) {
+        final netYield = (yieldDist['net_yield'] as num).toDouble();
+        final grossYield = (yieldDist['gross_yield'] as num).toDouble();
+        final balanceBefore = (yieldDist['balance_before'] as num).toDouble();
+        final yieldsData = yieldDist['yields'] as Map<String, dynamic>;
+        final appliedDate = DateTime.parse(yieldsData['applied_date'] as String);
+        final createdAtStr = yieldsData['created_at'] as String?;
+        
+        DateTime actionDate;
+        if (createdAtStr != null && createdAtStr.isNotEmpty) {
+          try {
+            actionDate = DateTime.parse(createdAtStr);
+          } catch (e) {
+            actionDate = appliedDate;
+          }
+        } else {
+          actionDate = appliedDate;
+        }
+        
+        double yieldPercent = 0.0;
+        if (balanceBefore > 0) {
+          yieldPercent = (grossYield / balanceBefore) * 100;
+        }
+        
+        allTransactions.add(TransactionHistoryItem(
+          id: yieldDist['id'] as int,
+          type: 'Yield',
+          amount: netYield,
+          yieldPercent: yieldPercent,
+          status: 'Applied',
+          date: appliedDate,
+          actionDate: actionDate,
+          isPositive: netYield >= 0,
+        ));
+      }
+      
+      // Sort by actionDate (most recent first) - will be re-sorted by filter
+      allTransactions.sort((a, b) => b.actionDate.compareTo(a.actionDate));
+      
+      if (mounted) {
+        setState(() {
+          _userTransactions = allTransactions;
+          _applyUserFilter();
+          _isLoadingTransactions = false;
+        });
+      }
+    } catch (e) {
+      print('[AdminScreen] Error loading user transactions: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingTransactions = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading transaction history: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _showEditProfileDialog(UserProfile user) async {
@@ -2530,6 +2617,71 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  void _applyUserFilter() {
+    List<TransactionHistoryItem> filtered = List.from(_userTransactions);
+
+    // Apply type filter
+    switch (_selectedUserType) {
+      case UserTransactionType.yields:
+        filtered = filtered.where((trans) => trans.type == 'Yield').toList();
+        break;
+      case UserTransactionType.transactions:
+        filtered = filtered.where((trans) => trans.type == 'Deposit' || trans.type == 'Withdrawal').toList();
+        break;
+      case UserTransactionType.pending:
+        filtered = filtered.where((trans) => trans.status == 'Verifying' || trans.status == 'PENDING').toList();
+        break;
+      case UserTransactionType.all:
+        // Show all transactions
+        break;
+    }
+
+    // Apply date sorting
+    switch (_currentUserFilter) {
+      case TransactionFilter.dateAscending:
+        filtered.sort((a, b) => a.date.compareTo(b.date)); // Ascending
+        break;
+      case TransactionFilter.dateDescending:
+        filtered.sort((a, b) => b.date.compareTo(a.date)); // Descending
+        break;
+    }
+
+    setState(() {
+      _filteredUserTransactions = filtered;
+    });
+  }
+
+  Widget _buildUserTypeToggle(String label, UserTransactionType type) {
+    final isSelected = _selectedUserType == type;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedUserType = type;
+          });
+          _applyUserFilter();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primaryColor : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : Colors.grey.shade700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggleUserStatus(UserProfile user) async {
     setState(() => _isTogglingUserStatus = true);
 
@@ -2601,9 +2753,16 @@ class _AdminScreenState extends State<AdminScreen> {
               fillColor: Colors.grey.shade50,
             ),
             items: _allUsers.map((user) {
+              final isDisabled = user.isActive == false;
               return DropdownMenuItem<UserProfile>(
                 value: user,
-                child: Text('${user.firstName ?? ''} ${user.lastName ?? ''} (${user.email})'),
+                child: Text(
+                  '${user.firstName ?? ''} ${user.lastName ?? ''} (${user.email})',
+                  style: TextStyle(
+                    color: isDisabled ? Colors.red : null,
+                    fontWeight: isDisabled ? FontWeight.w500 : null,
+                  ),
+                ),
               );
             }).toList(),
             onChanged: _isLoadingUsers ? null : _onUserSelected,
@@ -2615,46 +2774,198 @@ class _AdminScreenState extends State<AdminScreen> {
               child: Center(child: CircularProgressIndicator()),
             )
           else if (_selectedUser != null) ...[
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             
-            // Action buttons
-            StyledButton(
-              onPressed: () => _showEditProfileDialog(_selectedUser!),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.edit, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  PrimaryTextW('Edit Profile'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            StyledButton(
-              backgroundColor: _selectedUser!.isActive ? Colors.red : Colors.green,
-              onPressed: _isTogglingUserStatus ? null : () => _toggleUserStatus(_selectedUser!),
-              child: _isTogglingUserStatus
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Row(
+            // Action buttons - smaller and side by side
+            Row(
+              children: [
+                Expanded(
+                  child: StyledButton(
+                    onPressed: () => _showEditProfileDialog(_selectedUser!),
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          _selectedUser!.isActive ? Icons.block : Icons.check_circle,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        PrimaryTextW(_selectedUser!.isActive ? 'Disable User' : 'Enable User'),
+                        Icon(Icons.edit, color: Colors.white, size: 16),
+                        const SizedBox(width: 6),
+                        PrimaryTextW('Edit', fontSize: 14),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: StyledButton(
+                    backgroundColor: _selectedUser!.isActive ? Colors.red : Colors.green,
+                    onPressed: _isTogglingUserStatus ? null : () => _toggleUserStatus(_selectedUser!),
+                    child: _isTogglingUserStatus
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _selectedUser!.isActive ? Icons.block : Icons.check_circle,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              PrimaryTextW(
+                                _selectedUser!.isActive ? 'Disable' : 'Enable',
+                                fontSize: 14,
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
             ),
+            
+            const SizedBox(height: 32),
+            
+            // Transaction History Section
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TitleText('Transaction History', fontSize: 20, color: AppColors.titleColor),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Filter tabs and date filter
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      _buildUserTypeToggle('Yields', UserTransactionType.yields),
+                      const SizedBox(width: 8),
+                      _buildUserTypeToggle('Transactions', UserTransactionType.transactions),
+                      const SizedBox(width: 8),
+                      _buildUserTypeToggle('Pending', UserTransactionType.pending),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Date filter button
+                PopupMenuButton<TransactionFilter>(
+                  color: Colors.white,
+                  icon: Icon(Icons.filter_list_rounded),
+                  onSelected: (TransactionFilter filter) {
+                    setState(() {
+                      _currentUserFilter = filter;
+                    });
+                    _applyUserFilter();
+                  },
+                  itemBuilder: (BuildContext context) => [
+                    PopupMenuItem<TransactionFilter>(
+                      value: TransactionFilter.dateAscending,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.arrow_upward,
+                            size: 20,
+                            color: _currentUserFilter == TransactionFilter.dateAscending
+                                ? AppColors.primaryColor
+                                : Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Date: Ascending',
+                            style: TextStyle(
+                              color: _currentUserFilter == TransactionFilter.dateAscending
+                                  ? AppColors.primaryColor
+                                  : Colors.grey.shade800,
+                              fontWeight: _currentUserFilter == TransactionFilter.dateAscending
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          if (_currentUserFilter == TransactionFilter.dateAscending)
+                            const Spacer(),
+                          if (_currentUserFilter == TransactionFilter.dateAscending)
+                            Icon(
+                              Icons.check,
+                              color: AppColors.primaryColor,
+                              size: 20,
+                            ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<TransactionFilter>(
+                      value: TransactionFilter.dateDescending,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.arrow_downward,
+                            size: 20,
+                            color: _currentUserFilter == TransactionFilter.dateDescending
+                                ? AppColors.primaryColor
+                                : Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Date: Descending',
+                            style: TextStyle(
+                              color: _currentUserFilter == TransactionFilter.dateDescending
+                                  ? AppColors.primaryColor
+                                  : Colors.grey.shade800,
+                              fontWeight: _currentUserFilter == TransactionFilter.dateDescending
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          if (_currentUserFilter == TransactionFilter.dateDescending)
+                            const Spacer(),
+                          if (_currentUserFilter == TransactionFilter.dateDescending)
+                            Icon(
+                              Icons.check,
+                              color: AppColors.primaryColor,
+                              size: 20,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            if (_isLoadingTransactions)
+              const Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_filteredUserTransactions.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Center(
+                  child: SecondaryText(
+                    'No transactions found',
+                    fontSize: 14,
+                    color: AppColors.secondaryTextColor,
+                  ),
+                ),
+              )
+            else
+              ..._filteredUserTransactions.map((transaction) {
+                return TransactionCard(
+                  date: TransactionHistoryService.formatDate(transaction.date),
+                  amount: transaction.amount,
+                  info: transaction.yieldPercent,
+                  status: transaction.status,
+                  type: transaction.type,
+                  isPositive: transaction.isPositive,
+                );
+              }).toList(),
           ],
         ],
       ),

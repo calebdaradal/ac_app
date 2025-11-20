@@ -1,7 +1,6 @@
 import 'package:ac_app/services/bank_details_service.dart';
 import 'package:ac_app/services/transaction_service.dart';
 import 'package:ac_app/services/user_profile_service.dart';
-import 'package:ac_app/services/admin_settings_service.dart';
 import 'package:ac_app/constants/transaction_constants.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_card.dart';
@@ -125,25 +124,6 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
   }
 
   Future<void> _handleWithdrawal() async {
-    // Failsafe check: Verify withdrawal is still allowed before processing
-    try {
-      final isAllowed = await AdminSettingsService.isWithdrawalAllowed();
-      if (!isAllowed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Withdrawals are not available at this time. The annual withdraw date has passed.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 4),
-          ),
-        );
-        // Navigate back to vehicle screen
-        Navigator.pop(context);
-        return;
-      }
-    } catch (e) {
-      print('[WithdrawScreen] Error checking withdrawal availability: $e');
-      // Continue with withdrawal if check fails (fail open)
-    }
 
     // Check if bank details are complete
     if (_bankDetails == null) {

@@ -2,7 +2,6 @@ import 'package:ac_app/screens/vehicles/deposit_screen.dart';
 import 'package:ac_app/screens/vehicles/withdraw_screen.dart';
 import 'package:ac_app/services/investment_service.dart';
 import 'package:ac_app/services/transaction_history_service.dart';
-import 'package:ac_app/services/admin_settings_service.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_card.dart';
 import 'package:ac_app/shared/styled_text.dart';
@@ -41,32 +40,11 @@ class _StkScreenState extends State<StkScreen> {
   TransactionFilter _currentFilter = TransactionFilter.dateDescending; // Default date sort
   TransactionType _selectedType = TransactionType.all; // Default type filter
   bool _loadingTransactions = false;
-  bool _isWithdrawalAllowed = true;
 
   @override
   void initState() {
     super.initState();
     _loadSubscriptionData();
-    _checkWithdrawalAvailability();
-  }
-
-  Future<void> _checkWithdrawalAvailability() async {
-    try {
-      final isAllowed = await AdminSettingsService.isWithdrawalAllowed();
-      if (mounted) {
-        setState(() {
-          _isWithdrawalAllowed = isAllowed;
-        });
-      }
-    } catch (e) {
-      print('[StkScreen] Error checking withdrawal availability: $e');
-      // If there's an error, allow withdrawal by default
-      if (mounted) {
-        setState(() {
-          _isWithdrawalAllowed = true;
-        });
-      }
-    }
   }
 
   Future<void> _loadSubscriptionData() async {
@@ -197,7 +175,6 @@ class _StkScreenState extends State<StkScreen> {
 
   Future<void> _refreshData() async {
     await _loadSubscriptionData();
-    await _checkWithdrawalAvailability();
   }
 
   Future<void> _navigateToDeposit() async {
@@ -227,20 +204,6 @@ class _StkScreenState extends State<StkScreen> {
       return;
     }
 
-    // Refresh withdrawal availability before navigating
-    await _checkWithdrawalAvailability();
-    
-    // Double-check after refresh
-    if (!_isWithdrawalAllowed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Withdrawals are not available at this time. The annual withdraw date has passed.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     // Check if user is subscribed to this vehicle
     if (!_subscription!.isSubscribed) {
       await _showWarningDialog('You must have an active investment to withdraw');
@@ -263,7 +226,6 @@ class _StkScreenState extends State<StkScreen> {
     if (result == true) {
       _loadSubscriptionData();
       _loadTransactionHistory();
-      await _checkWithdrawalAvailability();
     }
   }
 
@@ -602,19 +564,8 @@ class _StkScreenState extends State<StkScreen> {
                         
                         Expanded(
                           child: StyledButton(
-                            backgroundColor: _isWithdrawalAllowed 
-                                ? const Color.fromARGB(255, 85, 85, 85)
-                                : Colors.grey,
-                            onPressed: _isWithdrawalAllowed ? _navigateToWithdraw : null, 
-                            child: Text(
-                              _isWithdrawalAllowed ? 'Withdraw Funds' : 'Withdraw not Available', 
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: _isWithdrawalAllowed ? 16 : 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                            onPressed: _navigateToWithdraw,
+                            child: TitleText('Withdraw Funds', color: Colors.white, fontSize: 16),
                           ),
                         ),
                       ],
