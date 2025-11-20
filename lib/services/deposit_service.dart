@@ -9,7 +9,7 @@ class DepositService {
   static Future<List<UserProfile>> getAllUsers() async {
     final response = await _supabase
         .from('profiles')
-        .select('id, first_name, last_name, email, avatar_url')
+        .select('id, first_name, last_name, email, avatar_url, is_active')
         .order('first_name', ascending: true);
 
     return (response as List).map((item) {
@@ -20,6 +20,7 @@ class DepositService {
         email: item['email'] as String? ?? '',
         avatarUrl: item['avatar_url'] as String?,
         isAdmin: false,
+        isActive: item['is_active'] as bool? ?? true,
       );
     }).toList();
   }

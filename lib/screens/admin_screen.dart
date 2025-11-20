@@ -41,14 +41,8 @@ class _AdminScreenState extends State<AdminScreen> {
   // Manage Users state
   List<UserProfile> _allUsers = [];
   UserProfile? _selectedUser;
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _emailController = TextEditingController();
-  String? _avatarUrl;
-  int _avatarRefreshKey = 0;
   bool _isLoadingUsers = false;
-  bool _isUpdatingUser = false;
-  bool _isUploadingAvatar = false;
+  bool _isTogglingUserStatus = false;
   final ImagePicker _imagePicker = ImagePicker();
   final AvatarService _avatarService = AvatarService();
 
@@ -60,9 +54,6 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 
@@ -2014,11 +2005,8 @@ class _AdminScreenState extends State<AdminScreen> {
                     if (_currentView == 'manage_users') {
                       setState(() {
                         _currentView = 'transactions';
+                        // Reset selection when going back to transactions
                         _selectedUser = null;
-                        _firstNameController.clear();
-                        _lastNameController.clear();
-                        _emailController.clear();
-                        _avatarUrl = null;
                       });
                     } else {
                       Navigator.pop(context);
@@ -2181,6 +2169,8 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _switchToManageUsers() async {
     setState(() {
       _currentView = 'manage_users';
+      // Reset selection when switching to manage users view
+      _selectedUser = null;
     });
     await _loadUsers();
   }
@@ -2190,14 +2180,36 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       final users = await DepositService.getAllUsers();
       if (mounted) {
+        // If a user was previously selected, try to find it in the new list by uid
+        String? previousUid = _selectedUser?.uid;
+        
         setState(() {
           _allUsers = users;
           _isLoadingUsers = false;
+          
+            // If we had a selected user, try to find it in the new list
+            if (previousUid != null) {
+              final matchingUser = users.firstWhere(
+                (u) => u.uid == previousUid,
+                orElse: () => _selectedUser!,
+              );
+              // Only update if it's actually a different instance
+              if (matchingUser.uid == previousUid) {
+                _selectedUser = matchingUser;
+              } else {
+                // User not found in new list, reset selection
+                _selectedUser = null;
+              }
+            }
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoadingUsers = false);
+        setState(() {
+          _isLoadingUsers = false;
+          // Reset selection on error
+          _selectedUser = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading users: $e')),
         );
@@ -2209,177 +2221,290 @@ class _AdminScreenState extends State<AdminScreen> {
     if (user == null) {
       setState(() {
         _selectedUser = null;
-        _firstNameController.clear();
-        _lastNameController.clear();
-        _emailController.clear();
-        _avatarUrl = null;
       });
       return;
     }
 
     setState(() {
       _selectedUser = user;
-      _firstNameController.text = user.firstName ?? '';
-      _lastNameController.text = user.lastName ?? '';
-      _emailController.text = user.email;
-      _avatarUrl = user.avatarUrl;
-      _avatarRefreshKey++;
     });
   }
 
-  Future<void> _pickAndUploadAvatar() async {
-    if (_selectedUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a user first')),
-      );
-      return;
-    }
+  Future<void> _showEditProfileDialog(UserProfile user) async {
+    final firstNameController = TextEditingController(text: user.firstName ?? '');
+    final lastNameController = TextEditingController(text: user.lastName ?? '');
+    final emailController = TextEditingController(text: user.email);
+    String? avatarUrl = user.avatarUrl;
+    int avatarRefreshKey = 0;
+    bool isUploadingAvatar = false;
+    bool isUpdatingUser = false;
 
-    try {
-      // Show image source selection dialog
-      final ImageSource? source = await showDialog<ImageSource>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Select Image Source'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Photo Library'),
-                onTap: () => Navigator.pop(context, ImageSource.gallery),
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              title: Row(
+                children: [
+                  Icon(Icons.edit, color: AppColors.primaryColor),
+                  const SizedBox(width: 12),
+                  const TitleText('Edit Profile', fontSize: 20),
+                ],
               ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
-                onTap: () => Navigator.pop(context, ImageSource.camera),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.9,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Avatar section
+                      Center(
+                        child: Column(
+                          children: [
+                            Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 60,
+                                  backgroundColor: Colors.grey.shade300,
+                                  backgroundImage: avatarUrl != null
+                                      ? NetworkImage('$avatarUrl?key=$avatarRefreshKey')
+                                      : null,
+                                  child: avatarUrl == null
+                                      ? Icon(Icons.person, size: 60, color: Colors.grey.shade600)
+                                      : null,
+                                ),
+                                if (isUploadingAvatar)
+                                  Positioned.fill(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Center(
+                                        child: CircularProgressIndicator(color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            StyledButton(
+                              onPressed: isUploadingAvatar ? null : () async {
+                                try {
+                                  final ImageSource? source = await showDialog<ImageSource>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('Select Image Source'),
+                                      content: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ListTile(
+                                            leading: const Icon(Icons.photo_library),
+                                            title: const Text('Photo Library'),
+                                            onTap: () => Navigator.pop(context, ImageSource.gallery),
+                                          ),
+                                          ListTile(
+                                            leading: const Icon(Icons.camera_alt),
+                                            title: const Text('Camera'),
+                                            onTap: () => Navigator.pop(context, ImageSource.camera),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                  
+                                  if (source == null) return;
+                                  
+                                  final XFile? pickedFile = await _imagePicker.pickImage(source: source);
+                                  if (pickedFile == null) return;
+                                  
+                                  final Uint8List originalBytes = await pickedFile.readAsBytes();
+                                  final img.Image? originalImage = img.decodeImage(originalBytes);
+                                  if (originalImage == null) {
+                                    throw Exception('Failed to decode image');
+                                  }
+                                  
+                                  final int size = originalImage.width < originalImage.height 
+                                      ? originalImage.width 
+                                      : originalImage.height;
+                                  final int x = (originalImage.width - size) ~/ 2;
+                                  final int y = (originalImage.height - size) ~/ 2;
+                                  
+                                  final img.Image croppedImage = img.copyCrop(
+                                    originalImage,
+                                    x: x,
+                                    y: y,
+                                    width: size,
+                                    height: size,
+                                  );
+                                  
+                                  final int targetSize = size > 800 ? 800 : size;
+                                  final img.Image resizedImage = img.copyResize(
+                                    croppedImage,
+                                    width: targetSize,
+                                    height: targetSize,
+                                    interpolation: img.Interpolation.cubic,
+                                  );
+                                  
+                                  final Uint8List pngBytes = Uint8List.fromList(img.encodePng(resizedImage));
+                                  final Directory tempDir = Directory.systemTemp;
+                                  final String tempPath = '${tempDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}.png';
+                                  final File imageFile = File(tempPath);
+                                  await imageFile.writeAsBytes(pngBytes);
+                                  
+                                  setDialogState(() => isUploadingAvatar = true);
+                                  
+                                  final newAvatarUrl = await _avatarService.uploadAvatar(imageFile, user.uid);
+                                  await _avatarService.updateProfileAvatarUrl(user.uid, newAvatarUrl);
+                                  
+                                  try {
+                                    if (await imageFile.exists()) await imageFile.delete();
+                                  } catch (e) {
+                                    print('[EditProfileDialog] Warning: Could not delete temp file: $e');
+                                  }
+                                  
+                                  setDialogState(() {
+                                    isUploadingAvatar = false;
+                                    avatarUrl = newAvatarUrl;
+                                    avatarRefreshKey++;
+                                  });
+                                  
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Avatar updated successfully!')),
+                                    );
+                                  }
+                                } catch (e) {
+                                  setDialogState(() => isUploadingAvatar = false);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error uploading avatar: $e')),
+                                    );
+                                  }
+                                }
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                                  const SizedBox(width: 8),
+                                  PrimaryTextW('Change Profile Picture'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      
+                      // Form fields
+                      const SecondaryText('First Name', fontSize: 14),
+                      const SizedBox(height: 8),
+                      StyledTextfield(
+                        controller: firstNameController,
+                        keyboardType: TextInputType.text,
+                        label: 'Enter first name',
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      const SecondaryText('Last Name', fontSize: 14),
+                      const SizedBox(height: 8),
+                      StyledTextfield(
+                        controller: lastNameController,
+                        keyboardType: TextInputType.text,
+                        label: 'Enter last name',
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      const SecondaryText('Email', fontSize: 14),
+                      const SizedBox(height: 8),
+                      StyledTextfield(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        label: 'Enter email',
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
-        ),
-      );
-      
-      if (source == null) return;
-      
-      // Pick image
-      final XFile? pickedFile = await _imagePicker.pickImage(source: source);
-      if (pickedFile == null) return;
-      
-      // Read original image file
-      final Uint8List originalBytes = await pickedFile.readAsBytes();
-      print('[AdminScreen] Original image file size: ${originalBytes.length} bytes');
-      
-      // Decode image
-      final img.Image? originalImage = img.decodeImage(originalBytes);
-      if (originalImage == null) {
-        throw Exception('Failed to decode image');
-      }
-      
-      print('[AdminScreen] Original image dimensions: ${originalImage.width}x${originalImage.height}');
-      
-      // Crop to 1:1 aspect ratio (square) - center crop
-      final int size = originalImage.width < originalImage.height 
-          ? originalImage.width 
-          : originalImage.height;
-      final int x = (originalImage.width - size) ~/ 2;
-      final int y = (originalImage.height - size) ~/ 2;
-      
-      final img.Image croppedImage = img.copyCrop(
-        originalImage,
-        x: x,
-        y: y,
-        width: size,
-        height: size,
-      );
-      
-      // Resize to max 800x800
-      final int targetSize = size > 800 ? 800 : size;
-      final img.Image resizedImage = img.copyResize(
-        croppedImage,
-        width: targetSize,
-        height: targetSize,
-        interpolation: img.Interpolation.cubic,
-      );
-      
-      // Encode to PNG
-      final Uint8List pngBytes = Uint8List.fromList(img.encodePng(resizedImage));
-      
-      // Save to temporary file
-      final Directory tempDir = Directory.systemTemp;
-      final String tempPath = '${tempDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}.png';
-      final File imageFile = File(tempPath);
-      await imageFile.writeAsBytes(pngBytes);
-      
-      setState(() => _isUploadingAvatar = true);
-      
-      // Upload avatar
-      final avatarUrl = await _avatarService.uploadAvatar(imageFile, _selectedUser!.uid);
-      print('[AdminScreen] Avatar uploaded, URL: $avatarUrl');
-      
-      // Update profile in database
-      await _avatarService.updateProfileAvatarUrl(_selectedUser!.uid, avatarUrl);
-      
-      // Clean up temporary file
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                StyledButton(
+                  onPressed: isUpdatingUser ? null : () async {
+                    setDialogState(() => isUpdatingUser = true);
+                    try {
+                      await _updateUserProfile(
+                        user,
+                        firstNameController.text.trim(),
+                        lastNameController.text.trim(),
+                        emailController.text.trim(),
+                      );
+                      if (mounted) {
+                        Navigator.pop(context);
+                      }
+                    } finally {
+                      setDialogState(() => isUpdatingUser = false);
+                    }
+                  },
+                  child: isUpdatingUser
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : PrimaryTextW('Update'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    // Dispose controllers after dialog closes
+    Future.delayed(const Duration(milliseconds: 300), () {
       try {
-        if (await imageFile.exists()) await imageFile.delete();
+        firstNameController.dispose();
+        lastNameController.dispose();
+        emailController.dispose();
       } catch (e) {
-        print('[AdminScreen] Warning: Could not delete temp file: $e');
+        print('[EditProfileDialog] Controller disposal: $e');
       }
-      
-      // Update UI
-      if (mounted) {
-        setState(() {
-          _isUploadingAvatar = false;
-          _avatarUrl = avatarUrl;
-          _avatarRefreshKey++;
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Avatar updated successfully!')),
-        );
-      }
-    } catch (e) {
-      setState(() => _isUploadingAvatar = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error uploading avatar: $e')),
-        );
-      }
-    }
+    });
   }
 
-  Future<void> _updateUserProfile() async {
-    if (_selectedUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a user first')),
-      );
-      return;
-    }
 
-    if (_firstNameController.text.trim().isEmpty ||
-        _lastNameController.text.trim().isEmpty ||
-        _emailController.text.trim().isEmpty) {
+  Future<void> _updateUserProfile(UserProfile user, String firstName, String lastName, String email) async {
+    if (firstName.trim().isEmpty ||
+        lastName.trim().isEmpty ||
+        email.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields')),
       );
       return;
     }
 
-    setState(() => _isUpdatingUser = true);
-
     try {
       final supabase = Supabase.instance.client;
       await supabase
           .from('profiles')
           .update({
-            'first_name': _firstNameController.text.trim(),
-            'last_name': _lastNameController.text.trim(),
-            'email': _emailController.text.trim(),
+            'first_name': firstName.trim(),
+            'last_name': lastName.trim(),
+            'email': email.trim(),
           })
-          .eq('id', _selectedUser!.uid);
-
-      // Note: Email update in auth.users table requires admin privileges
-      // The email in profiles table is updated, which is what's displayed in the app
+          .eq('id', user.uid);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2391,13 +2516,6 @@ class _AdminScreenState extends State<AdminScreen> {
         
         // Reload users to get updated data
         await _loadUsers();
-        
-        // Update selected user
-        final updatedUser = _allUsers.firstWhere(
-          (u) => u.uid == _selectedUser!.uid,
-          orElse: () => _selectedUser!,
-        );
-        _onUserSelected(updatedUser);
       }
     } catch (e) {
       if (mounted) {
@@ -2408,9 +2526,54 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
         );
       }
+      rethrow;
+    }
+  }
+
+  Future<void> _toggleUserStatus(UserProfile user) async {
+    setState(() => _isTogglingUserStatus = true);
+
+    try {
+      final supabase = Supabase.instance.client;
+      final newStatus = !user.isActive;
+      
+      await supabase
+          .from('profiles')
+          .update({'is_active': newStatus})
+          .eq('id', user.uid);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newStatus ? 'User enabled successfully!' : 'User disabled successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Reload users to get updated data
+        await _loadUsers();
+        
+        // Update selected user if it's the same user
+        if (_selectedUser?.uid == user.uid) {
+          final updatedUser = _allUsers.firstWhere(
+            (u) => u.uid == user.uid,
+            orElse: () => user,
+          );
+          _onUserSelected(updatedUser);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error toggling user status: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
-        setState(() => _isUpdatingUser = false);
+        setState(() => _isTogglingUserStatus = false);
       }
     }
   }
@@ -2426,7 +2589,9 @@ class _AdminScreenState extends State<AdminScreen> {
           
           // User selector dropdown
           DropdownButtonFormField<UserProfile>(
-            value: _selectedUser,
+            value: _selectedUser != null && _allUsers.any((u) => u.uid == _selectedUser!.uid)
+                ? _allUsers.firstWhere((u) => u.uid == _selectedUser!.uid)
+                : null,
             decoration: InputDecoration(
               labelText: 'Select User',
               border: OutlineInputBorder(
@@ -2452,86 +2617,23 @@ class _AdminScreenState extends State<AdminScreen> {
           else if (_selectedUser != null) ...[
             const SizedBox(height: 32),
             
-            // Avatar section
-            Center(
-              child: Column(
+            // Action buttons
+            StyledButton(
+              onPressed: () => _showEditProfileDialog(_selectedUser!),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 60,
-                        backgroundColor: Colors.grey.shade300,
-                        backgroundImage: _avatarUrl != null
-                            ? NetworkImage('$_avatarUrl?key=$_avatarRefreshKey')
-                            : null,
-                        child: _avatarUrl == null
-                            ? Icon(Icons.person, size: 60, color: Colors.grey.shade600)
-                            : null,
-                      ),
-                      if (_isUploadingAvatar)
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Center(
-                              child: CircularProgressIndicator(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  StyledButton(
-                    onPressed: _isUploadingAvatar ? null : _pickAndUploadAvatar,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                        const SizedBox(width: 8),
-                        PrimaryTextW('Change Profile Picture'),
-                      ],
-                    ),
-                  ),
+                  Icon(Icons.edit, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  PrimaryTextW('Edit Profile'),
                 ],
               ),
             ),
-            
-            const SizedBox(height: 32),
-            
-            // Form fields
-            const SecondaryText('First Name', fontSize: 14),
-            const SizedBox(height: 8),
-            StyledTextfield(
-              controller: _firstNameController,
-              keyboardType: TextInputType.text,
-              label: 'Enter first name',
-            ),
             const SizedBox(height: 16),
-            
-            const SecondaryText('Last Name', fontSize: 14),
-            const SizedBox(height: 8),
-            StyledTextfield(
-              controller: _lastNameController,
-              keyboardType: TextInputType.text,
-              label: 'Enter last name',
-            ),
-            const SizedBox(height: 16),
-            
-            const SecondaryText('Email', fontSize: 14),
-            const SizedBox(height: 8),
-            StyledTextfield(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              label: 'Enter email',
-            ),
-            const SizedBox(height: 32),
-            
-            // Update button
             StyledButton(
-              onPressed: _isUpdatingUser ? null : _updateUserProfile,
-              child: _isUpdatingUser
+              backgroundColor: _selectedUser!.isActive ? Colors.red : Colors.green,
+              onPressed: _isTogglingUserStatus ? null : () => _toggleUserStatus(_selectedUser!),
+              child: _isTogglingUserStatus
                   ? const SizedBox(
                       height: 20,
                       width: 20,
@@ -2540,7 +2642,18 @@ class _AdminScreenState extends State<AdminScreen> {
                         strokeWidth: 2,
                       ),
                     )
-                  : PrimaryTextW('Update User Profile'),
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _selectedUser!.isActive ? Icons.block : Icons.check_circle,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        PrimaryTextW(_selectedUser!.isActive ? 'Disable User' : 'Enable User'),
+                      ],
+                    ),
             ),
           ],
         ],

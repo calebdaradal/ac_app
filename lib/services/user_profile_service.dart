@@ -107,6 +107,7 @@ class UserProfile {
   final String email;
   final String? avatarUrl;
   final bool isAdmin;
+  final bool isActive;
 
   UserProfile({
     required this.uid,
@@ -115,6 +116,7 @@ class UserProfile {
     required this.email,
     this.avatarUrl,
     this.isAdmin = false,
+    this.isActive = true,
   });
 
   String get fullName {
@@ -137,6 +139,7 @@ class UserProfile {
         'email': email,
         'avatar_url': avatarUrl,
         'is_admin': isAdmin,
+        'is_active': isActive,
       };
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
@@ -146,6 +149,7 @@ class UserProfile {
         email: json['email'] as String,
         avatarUrl: json['avatar_url'] as String?,
         isAdmin: json['is_admin'] as bool? ?? false,
+        isActive: json['is_active'] as bool? ?? true,
       );
 }
 
