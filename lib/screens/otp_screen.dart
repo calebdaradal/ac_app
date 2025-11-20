@@ -2,11 +2,11 @@ import 'package:ac_app/shared/styled_pin_input.dart';
 import 'package:ac_app/shared/styled_text.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:pinput/pinput.dart';
 import '../theme.dart';
 
 import '../services/supabase_service.dart';
 import '../services/pin_storage.dart';
+import '../services/otp_session_service.dart';
 import 'pin_create_screen.dart';
 import 'pin_unlock_screen.dart';
 
@@ -38,6 +38,9 @@ class _OtpScreenState extends State<OtpScreen> {
       await SupabaseService.verifyOtp(email: email, token: _code);
       
       if (mounted) {
+        // Clear the OTP session after successful verification
+        OtpSessionService.clearSession();
+        
         // Check if user already has a PIN in the database
         final hasPinInDb = await PinStorage.hasPinInDatabase();
         print('[OTP] User has PIN in database: $hasPinInDb');
@@ -60,13 +63,37 @@ class _OtpScreenState extends State<OtpScreen> {
   @override
   void initState() {
     super.initState();
-    _startTimer();
+    // Don't start timer here - wait for didChangeDependencies to get the timestamp
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _email ??= ModalRoute.of(context)!.settings.arguments as String?;
+    final args = ModalRoute.of(context)!.settings.arguments;
+    
+    if (args is Map) {
+      // New format: arguments is a map with email and timestamp
+      _email ??= args['email'] as String?;
+      final timestampMs = args['timestamp'] as int?;
+      if (timestampMs != null) {
+        // Calculate remaining seconds based on original timestamp
+        final originalTimestamp = DateTime.fromMillisecondsSinceEpoch(timestampMs);
+        final elapsed = DateTime.now().difference(originalTimestamp);
+        final remaining = 60 - elapsed.inSeconds;
+        _secondsLeft = remaining > 0 ? remaining : 0;
+      }
+    } else if (args is String) {
+      // Legacy format: arguments is just the email string
+      _email ??= args;
+    }
+    
+    // Start timer after setting up the initial state
+    // Only reset to 60 if we don't have a restored timestamp
+    if (_timer == null) {
+      final args = ModalRoute.of(context)!.settings.arguments;
+      final hasTimestamp = args is Map && args['timestamp'] != null;
+      _startTimer(resetTo60: !hasTimestamp);
+    }
   }
 
   @override
@@ -75,8 +102,10 @@ class _OtpScreenState extends State<OtpScreen> {
     super.dispose();
   }
 
-  void _startTimer() {
-    _secondsLeft = 60;
+  void _startTimer({bool resetTo60 = false}) {
+    if (resetTo60) {
+      _secondsLeft = 60;
+    }
     _notifiedResendAvailable = false;
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -123,7 +152,18 @@ class _OtpScreenState extends State<OtpScreen> {
     });
     try {
       await SupabaseService.requestOtp(_email!);
-      _startTimer();
+      // Get the new timestamp for the timer
+      final newTimestamp = OtpSessionService.getSessionTimestamp(_email!);
+      if (newTimestamp != null) {
+        // Calculate remaining seconds from the new timestamp
+        final elapsed = DateTime.now().difference(newTimestamp);
+        final remaining = 60 - elapsed.inSeconds;
+        _secondsLeft = remaining > 0 ? remaining : 0;
+        // Restart timer with the calculated remaining time
+        _startTimer(resetTo60: false);
+      } else {
+        _startTimer(resetTo60: true);
+      }
       _showResendToast('Code sent. Check your email');
     } catch (e) {
       setState(() => _error = 'Failed to resend code');

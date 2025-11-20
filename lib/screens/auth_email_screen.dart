@@ -4,6 +4,7 @@ import 'package:ac_app/shared/styled_textfield.dart';
 import 'package:flutter/material.dart';
 
 import '../services/supabase_service.dart';
+import '../services/otp_session_service.dart';
 import 'otp_screen.dart';
 
 class AuthEmailScreen extends StatefulWidget {
@@ -43,6 +44,27 @@ class _AuthEmailScreenState extends State<AuthEmailScreen> {
       setState(() => _error = 'Please enter your email');
       return;
     }
+    
+    // Check if there's a valid existing OTP session for this email
+    final remainingSeconds = OtpSessionService.getValidSessionRemainingSeconds(email);
+    if (remainingSeconds != null) {
+      // Valid session exists - navigate directly to OTP screen without requesting new OTP
+      // Pass the original timestamp so the timer can be restored
+      final sessionTimestamp = OtpSessionService.getSessionTimestamp(email);
+      if (mounted) {
+        Navigator.pushNamed(
+          context, 
+          OtpScreen.routeName, 
+          arguments: {
+            'email': email,
+            'timestamp': sessionTimestamp?.millisecondsSinceEpoch,
+          },
+        );
+      }
+      return;
+    }
+    
+    // No valid session - request new OTP
     setState(() {
       _loading = true;
       _error = null;
@@ -50,7 +72,14 @@ class _AuthEmailScreenState extends State<AuthEmailScreen> {
     try {
       await SupabaseService.requestOtp(email);
       if (mounted) {
-        Navigator.pushNamed(context, OtpScreen.routeName, arguments: email);
+        Navigator.pushNamed(
+          context, 
+          OtpScreen.routeName, 
+          arguments: {
+            'email': email,
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          },
+        );
       }
     } catch (e) {
       setState(() => _error = 'Failed to request OTP. Make sure the email exists.');

@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'otp_session_service.dart';
 
 class SupabaseService {
   static SupabaseClient get client => Supabase.instance.client;
@@ -11,6 +12,9 @@ class SupabaseService {
       emailRedirectTo: null, // ensures no magic link deep link is included
       shouldCreateUser: true,
     );
+    
+    // Store the OTP session after successful request
+    OtpSessionService.storeOtpSession(email);
   }
 
   static Future<AuthResponse> verifyOtp({
