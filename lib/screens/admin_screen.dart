@@ -4014,10 +4014,10 @@ class _AdminScreenState extends State<AdminScreen> {
       final supabase = Supabase.instance.client;
       final userId = _selectedUser!.uid;
 
-      // Get the yield distribution record to get net_yield and vehicle_id
+      // Get the yield distribution record to get net_yield, vehicle_id, and yield_id
       final yieldDistResponse = await supabase
           .from('user_yield_distributions')
-          .select('id, net_yield, vehicle_id, balance_before, balance_after')
+          .select('id, net_yield, vehicle_id, balance_before, balance_after, yield_id')
           .eq('id', transaction.id)
           .eq('user_uid', userId)
           .maybeSingle();
@@ -4028,6 +4028,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
       final netYield = (yieldDistResponse['net_yield'] as num).toDouble();
       final vehicleId = yieldDistResponse['vehicle_id'] as int;
+      final yieldId = yieldDistResponse['yield_id'] as int;
 
       // Get current subscription to revert balance
       final subscriptionResponse = await supabase
@@ -4072,6 +4073,34 @@ class _AdminScreenState extends State<AdminScreen> {
 
       if (verifyDelete != null) {
         throw Exception('Failed to delete yield distribution from user_yield_distributions table. RLS policy may be blocking deletion. Please run rls_policies_yields_delete.sql');
+      }
+
+      // Check if there are any other distributions for this yield_id
+      final remainingDistributions = await supabase
+          .from('user_yield_distributions')
+          .select('id')
+          .eq('yield_id', yieldId)
+          .limit(1);
+
+      // If no other distributions exist for this yield, delete the yield record from yields table
+      if (remainingDistributions.isEmpty) {
+        await supabase
+            .from('yields')
+            .delete()
+            .eq('id', yieldId);
+
+        // Verify yield deletion
+        final verifyYieldDelete = await supabase
+            .from('yields')
+            .select('id')
+            .eq('id', yieldId)
+            .maybeSingle();
+
+        if (verifyYieldDelete != null) {
+          print('[AdminScreen] Warning: Failed to delete yield ${yieldId} from yields table. RLS policy may be blocking deletion.');
+        } else {
+          print('[AdminScreen] Deleted yield ${yieldId} from yields table (no remaining distributions)');
+        }
       }
 
       print('[AdminScreen] Deleted yield distribution ${transaction.id} from user_yield_distributions, reverted balance from ${currentBalance.toStringAsFixed(2)} to ${revertedBalanceRounded.toStringAsFixed(2)}');
