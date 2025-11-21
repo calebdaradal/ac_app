@@ -383,26 +383,14 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                                             ),
                                           ],
                                         ),
-                                        const SizedBox(height: 6.0),
+                                        const SizedBox(height: 12.0),
+                                        const Divider(height: 1.0),
+                                        const SizedBox(height: 12.0),
+                                      ] else if (_redemptionPenalty > 0) ...[
+                                        const SizedBox(height: 12.0),
+                                        const Divider(height: 1.0),
+                                        const SizedBox(height: 12.0),
                                       ],
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          TitleText(
-                                            'Total Penalties:',
-                                            fontSize: 14,
-                                            color: Colors.orange.shade700,
-                                          ),
-                                          TitleText(
-                                            '₱${_feeAmount.toStringAsFixed(2)}',
-                                            fontSize: 14,
-                                            color: Colors.orange.shade700,
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12.0),
-                                      const Divider(height: 1.0),
-                                      const SizedBox(height: 12.0),
                                     ],
                                     // Total Withdraw (withdrawal amount - penalties = what you actually receive)
                                     Row(
