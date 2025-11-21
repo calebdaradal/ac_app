@@ -61,6 +61,13 @@ class _AdminScreenState extends State<AdminScreen> {
   List<TransactionHistoryItem> _filteredUserTransactions = [];
   TransactionFilter _currentUserFilter = TransactionFilter.dateDescending;
   UserTransactionType _selectedUserType = UserTransactionType.all;
+  List<InvestmentVehicle> _allVehicles = [];
+  InvestmentVehicle? _selectedVehicle;
+  bool _isLoadingVehicles = false;
+  bool _isLoadingUserStats = false;
+  double _userCurrentBalance = 0.0;
+  double _userTotalContributions = 0.0;
+  double _userTotalYield = 0.0;
   final ImagePicker _imagePicker = ImagePicker();
   final AvatarService _avatarService = AvatarService();
 
@@ -235,6 +242,14 @@ class _AdminScreenState extends State<AdminScreen> {
           backgroundColor: Colors.green,
         ),
       );
+      
+      // Refresh user stats and transactions if viewing this user
+      if (_selectedUser != null && _selectedUser!.uid == transaction.userUid) {
+        await Future.wait([
+          _loadUserStats(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
+          _loadUserTransactions(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
+        ]);
+      }
       }
     } catch (e) {
       if (mounted) {
@@ -895,6 +910,14 @@ class _AdminScreenState extends State<AdminScreen> {
                             ],
                           ),
                         );
+                        
+                        // Refresh user stats and transactions if viewing a user and yield affects their vehicle
+                        if (_selectedUser != null && _selectedVehicle != null && _selectedVehicle!.id == selectedVehicle!.id) {
+                          await Future.wait([
+                            _loadUserStats(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
+                            _loadUserTransactions(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
+                          ]);
+                        }
                       }
                     } catch (e) {
                       setDialogState(() {
@@ -1284,6 +1307,14 @@ class _AdminScreenState extends State<AdminScreen> {
                         
                         // Refresh transactions
                         _loadTransactions();
+                        
+                        // Refresh user stats and transactions if viewing this user
+                        if (_selectedUser != null && _selectedUser!.uid == selectedUser!.uid) {
+                          await Future.wait([
+                            _loadUserStats(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
+                            _loadUserTransactions(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
+                          ]);
+                        }
                       }
                     } catch (e) {
                       setDialogState(() {
@@ -1895,6 +1926,14 @@ class _AdminScreenState extends State<AdminScreen> {
                         
                         // Refresh transactions
                         _loadTransactions();
+                        
+                        // Refresh user stats and transactions if viewing this user
+                        if (_selectedUser != null && _selectedUser!.uid == selectedUser!.uid) {
+                          await Future.wait([
+                            _loadUserStats(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
+                            _loadUserTransactions(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
+                          ]);
+                        }
                       }
                     } catch (e) {
                       setDialogState(() {
@@ -2169,6 +2208,7 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() {
         _selectedUser = null;
         _userTransactions = [];
+        _selectedVehicle = null;
       });
       return;
     }
@@ -2176,24 +2216,118 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() {
       _selectedUser = user;
       _userTransactions = [];
+      _selectedVehicle = null;
+      _userCurrentBalance = 0.0;
+      _userTotalContributions = 0.0;
+      _userTotalYield = 0.0;
     });
     
-    // Load transaction history for selected user
-    await _loadUserTransactions(user.uid);
+    // Load vehicles, transaction history, and stats for selected user
+    await _loadVehicles();
+    await Future.wait([
+      _loadUserTransactions(user.uid),
+      _loadUserStats(user.uid),
+    ]);
   }
 
-  Future<void> _loadUserTransactions(String userId) async {
+  Future<void> _loadUserStats(String userId, {int? vehicleId}) async {
+    setState(() => _isLoadingUserStats = true);
+    
+    try {
+      final supabase = Supabase.instance.client;
+      
+      // Query userinvestmentvehicle - filter by vehicle if selected
+      var subscriptionsQuery = supabase
+          .from('userinvestmentvehicle')
+          .select('total_contrib, current_balance, vehicle_id')
+          .eq('user_uid', userId);
+      
+      if (vehicleId != null) {
+        subscriptionsQuery = subscriptionsQuery.eq('vehicle_id', vehicleId);
+      }
+      
+      final subscriptions = await subscriptionsQuery;
+      
+      double totalContrib = 0.0;
+      double currentBalance = 0.0;
+      
+      // Sum up values across all vehicles (or single vehicle if selected)
+      for (var sub in subscriptions) {
+        totalContrib += (sub['total_contrib'] as num?)?.toDouble() ?? 0.0;
+        currentBalance += (sub['current_balance'] as num?)?.toDouble() ?? 0.0;
+      }
+      
+      // Calculate total yield: current_balance - total_contrib
+      final totalYield = currentBalance - totalContrib;
+      
+      if (mounted) {
+        setState(() {
+          _userCurrentBalance = currentBalance;
+          _userTotalContributions = totalContrib;
+          _userTotalYield = totalYield;
+          _isLoadingUserStats = false;
+        });
+      }
+    } catch (e) {
+      print('[AdminScreen] Error loading user stats: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingUserStats = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadVehicles() async {
+    setState(() => _isLoadingVehicles = true);
+    try {
+      final vehicles = await YieldService.getAllVehicles();
+      if (mounted) {
+        setState(() {
+          _allVehicles = vehicles;
+          _isLoadingVehicles = false;
+        });
+      }
+    } catch (e) {
+      print('[AdminScreen] Error loading vehicles: $e');
+      if (mounted) {
+        setState(() => _isLoadingVehicles = false);
+      }
+    }
+  }
+
+  Future<void> _onVehicleSelected(InvestmentVehicle? vehicle) async {
+    setState(() {
+      _selectedVehicle = vehicle;
+    });
+    
+    // Reload transactions and stats filtered by selected vehicle
+    if (_selectedUser != null) {
+      await Future.wait([
+        _loadUserTransactions(_selectedUser!.uid, vehicleId: vehicle?.id),
+        _loadUserStats(_selectedUser!.uid, vehicleId: vehicle?.id),
+      ]);
+    }
+  }
+
+  Future<void> _loadUserTransactions(String userId, {int? vehicleId}) async {
     setState(() => _isLoadingTransactions = true);
     
     try {
       final supabase = Supabase.instance.client;
       List<TransactionHistoryItem> allTransactions = [];
       
-      // Fetch all user transactions (deposits and withdrawals) across all vehicles
-      final userTransactionsResponse = await supabase
+      // Fetch user transactions (deposits and withdrawals) - filter by vehicle if selected
+      var userTransactionsQuery = supabase
           .from('usertransactions')
           .select('id, transaction_id, amount, status, applied_at, created_at, vehicle_id')
           .eq('user_uid', userId);
+      
+      if (vehicleId != null) {
+        userTransactionsQuery = userTransactionsQuery.eq('vehicle_id', vehicleId);
+      }
+      
+      final userTransactionsResponse = await userTransactionsQuery;
       
       for (var trans in userTransactionsResponse) {
         final transactionTypeId = trans['transaction_id'] as int;
@@ -2252,11 +2386,17 @@ class _AdminScreenState extends State<AdminScreen> {
         ));
       }
       
-      // Fetch yield distributions across all vehicles
-      final yieldDistributions = await supabase
+      // Fetch yield distributions - filter by vehicle if selected
+      var yieldDistributionsQuery = supabase
           .from('user_yield_distributions')
           .select('id, net_yield, gross_yield, balance_before, yield_id, vehicle_id, yields!inner(yield_type, yield_amount, applied_date, created_at)')
           .eq('user_uid', userId);
+      
+      if (vehicleId != null) {
+        yieldDistributionsQuery = yieldDistributionsQuery.eq('vehicle_id', vehicleId);
+      }
+      
+      final yieldDistributions = await yieldDistributionsQuery;
       
       for (var yieldDist in yieldDistributions) {
         final netYield = (yieldDist['net_yield'] as num).toDouble();
@@ -2830,11 +2970,71 @@ class _AdminScreenState extends State<AdminScreen> {
             
             const SizedBox(height: 32),
             
-            // Transaction History Section
+            // User Stats Section - using HomeCard layout (same as vehicle panel)
+            if (_isLoadingUserStats)
+              const Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
+              HomeCard(
+                currentBalance: _userCurrentBalance,
+                yield: _userTotalContributions > 0 
+                    ? ((_userCurrentBalance - _userTotalContributions) / _userTotalContributions) * 100 
+                    : 0.0,
+                totalContributions: _userTotalContributions,
+                totalYield: _userTotalYield,
+              ),
+            
+            // Transaction History Section with Vehicle Selector
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                TitleText('Transaction History', fontSize: 20, color: AppColors.titleColor),
+                Expanded(
+                  child: TitleText('Transaction History', fontSize: 20, color: AppColors.titleColor),
+                ),
+                const SizedBox(width: 12),
+                // Vehicle selector dropdown
+                if (!_isLoadingVehicles && _allVehicles.isNotEmpty)
+                  Container(
+                    width: 180,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: DropdownButtonFormField<InvestmentVehicle>(
+                      value: _selectedVehicle,
+                      decoration: InputDecoration(
+                        hintText: 'All Vehicles',
+                        hintStyle: TextStyle(
+                          color: AppColors.titleColor.withOpacity(0.5),
+                          fontSize: 14,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      isExpanded: true,
+                      items: [
+                        // "All Vehicles" option
+                        const DropdownMenuItem<InvestmentVehicle>(
+                          value: null,
+                          child: Text('All Vehicles', style: TextStyle(fontSize: 14)),
+                        ),
+                        // Vehicle options
+                        ..._allVehicles.map((vehicle) {
+                          return DropdownMenuItem<InvestmentVehicle>(
+                            value: vehicle,
+                            child: Text(
+                              vehicle.vehicleName,
+                              style: const TextStyle(fontSize: 14),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                      onChanged: _isLoadingTransactions ? null : _onVehicleSelected,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
