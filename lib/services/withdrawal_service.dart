@@ -107,40 +107,45 @@ class WithdrawalService {
     final threshold = currentBalance / 3.0;
     
     // TWO PENALTIES (applied sequentially):
-    // 1. Redemption penalty (5%): Applies on NON-redemption dates
-    // 2. Gate penalty (5%): Applies when withdrawal >= 33.33% of balance (checked after redemption penalty)
-    double feeAmount = 0.0;
-    double withdrawalAfterRedemption = withdrawalAmountRounded;
+    // 1. Redemption penalty (5%): Reduces withdrawal amount by 5%
+    // 2. Gate penalty (5%): Applied to the reduced amount if threshold is met
+    double withdrawalAfterPenalties = withdrawalAmountRounded;
+    double totalFee = 0.0;
     
     // STEP 1: Apply redemption penalty (5% on NON-redemption dates)
+    // This reduces the withdrawal amount by 5%
     if (!isRedemptionDate) {
       final redemptionPenalty = withdrawalAmountRounded * 0.05;
-      feeAmount += redemptionPenalty;
-      withdrawalAfterRedemption = withdrawalAmountRounded; // Withdrawal amount stays the same, fee is separate
+      withdrawalAfterPenalties = withdrawalAmountRounded - redemptionPenalty;
+      totalFee += redemptionPenalty;
       print('[WithdrawalService] Applied redemption penalty (5%): $redemptionPenalty');
+      print('[WithdrawalService] Withdrawal after redemption penalty: $withdrawalAfterPenalties');
     }
     
-    // STEP 2: Check if withdrawal amount >= 33.33% of balance
-    // If yes, apply gate penalty (5%) to the withdrawal amount
-    if (withdrawalAfterRedemption >= threshold) {
-      final gatePenalty = withdrawalAfterRedemption * 0.05;
-      feeAmount += gatePenalty;
-      print('[WithdrawalService] Applied gate penalty (5% of $withdrawalAfterRedemption): $gatePenalty');
-      print('[WithdrawalService] Withdrawal: $withdrawalAfterRedemption, Threshold: $threshold, Percentage: ${(withdrawalAfterRedemption / currentBalance * 100).toStringAsFixed(2)}%');
+    // STEP 2: Check if original withdrawal amount >= 33.33% of balance
+    // If yes, apply gate penalty (5%) to the NEW withdrawal amount (after redemption penalty)
+    if (withdrawalAmountRounded >= threshold) {
+      final gatePenalty = withdrawalAfterPenalties * 0.05;
+      withdrawalAfterPenalties = withdrawalAfterPenalties - gatePenalty;
+      totalFee += gatePenalty;
+      print('[WithdrawalService] Applied gate penalty (5%): $gatePenalty');
+      print('[WithdrawalService] Final withdrawal amount: $withdrawalAfterPenalties');
+      print('[WithdrawalService] Original withdrawal: $withdrawalAmountRounded, Threshold: $threshold, Percentage: ${(withdrawalAmountRounded / currentBalance * 100).toStringAsFixed(2)}%');
     } else {
-      print('[WithdrawalService] No gate penalty - Withdrawal: $withdrawalAfterRedemption, Threshold: $threshold, Percentage: ${(withdrawalAfterRedemption / currentBalance * 100).toStringAsFixed(2)}%');
+      print('[WithdrawalService] No gate penalty - Original withdrawal: $withdrawalAmountRounded, Threshold: $threshold, Percentage: ${(withdrawalAmountRounded / currentBalance * 100).toStringAsFixed(2)}%');
     }
     
     // Round fee to 2 decimal places
-    final feeAmountRounded = (feeAmount * 100).round() / 100.0;
+    final feeAmountRounded = (totalFee * 100).round() / 100.0;
+    final finalWithdrawRounded = (withdrawalAfterPenalties * 100).round() / 100.0;
     
-    // Total deduction = withdrawal + fee
-    final totalDeduction = withdrawalAmountRounded + feeAmountRounded;
-    final totalDeductionRounded = (totalDeduction * 100).round() / 100.0;
+    // Total deduction from balance is still the original withdrawal amount
+    // But the actual amount user receives is reduced by penalties
+    final totalDeductionRounded = withdrawalAmountRounded;
 
-    // Check if total deduction exceeds balance
+    // Check if withdrawal exceeds balance
     if (totalDeductionRounded > currentBalance) {
-      throw Exception('Insufficient balance after fee. Available: $currentBalance, Required: $totalDeductionRounded');
+      throw Exception('Insufficient balance. Available: $currentBalance, Required: $totalDeductionRounded');
     }
 
     // Format applied_date for database (date only, no time)
@@ -158,7 +163,7 @@ class WithdrawalService {
       throw Exception('User investment vehicle not found');
     }
 
-    // Calculate new balance after withdrawal
+    // Calculate new balance after withdrawal (deduct original withdrawal amount)
     final newCurrentBalance = currentBalance - totalDeductionRounded;
     final newCurrentBalanceRounded = (newCurrentBalance * 100).round() / 100.0;
 
@@ -190,9 +195,10 @@ class WithdrawalService {
 
     print('[WithdrawalService] Withdrawal applied successfully');
     print('[WithdrawalService] Applied date: $appliedDate (Redemption date: $isRedemptionDate)');
-    print('[WithdrawalService] Withdrawal amount: $withdrawalAmountRounded');
-    print('[WithdrawalService] Fee amount: $feeAmountRounded');
-    print('[WithdrawalService] Total deduction: $totalDeductionRounded');
+    print('[WithdrawalService] Original withdrawal amount: $withdrawalAmountRounded');
+    print('[WithdrawalService] Total fees deducted: $feeAmountRounded');
+    print('[WithdrawalService] Final withdrawal amount (what user receives): $finalWithdrawRounded');
+    print('[WithdrawalService] Total deduction from balance: $totalDeductionRounded');
     print('[WithdrawalService] New balance: $newCurrentBalanceRounded');
   }
 }

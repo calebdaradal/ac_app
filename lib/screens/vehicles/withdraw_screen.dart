@@ -111,33 +111,37 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
       return;
     }
 
-    // Calculate penalties separately for display
+    // Calculate penalties sequentially (same logic as TransactionService)
     final isRedemptionDate = RedemptionDates.isRedemptionDate(DateTime.now());
     final threshold = _currentBalance! / 3.0;
     
+    double withdrawalAfterPenalties = amount;
     double redemptionPenalty = 0.0;
     double gatePenalty = 0.0;
     
     // STEP 1: Apply redemption penalty (5% on NON-redemption dates)
+    // This reduces the withdrawal amount by 5%
     if (!isRedemptionDate) {
       redemptionPenalty = amount * 0.05;
+      withdrawalAfterPenalties = amount - redemptionPenalty;
     }
     
-    // STEP 2: Check if withdrawal amount >= 33.33% of balance
-    // If yes, apply gate penalty (5%) to the withdrawal amount
+    // STEP 2: Check if original withdrawal amount >= 33.33% of balance
+    // If yes, apply gate penalty (5%) to the NEW withdrawal amount (after redemption penalty)
     if (amount >= threshold) {
-      gatePenalty = amount * 0.05;
+      gatePenalty = withdrawalAfterPenalties * 0.05;
+      withdrawalAfterPenalties = withdrawalAfterPenalties - gatePenalty;
     }
     
     final totalFee = redemptionPenalty + gatePenalty;
-    // Total deduction from balance = withdrawal amount + fees
-    final totalDeduction = amount + totalFee;
-    // Total withdraw (what user receives) = withdrawal amount - fees
-    final totalWithdraw = amount - totalFee;
+    // Total deduction from balance = original withdrawal amount
+    // Final withdraw (what user receives) = withdrawal amount after all penalties
+    final totalDeduction = amount; // Original withdrawal amount (what gets deducted from balance)
+    final totalWithdraw = withdrawalAfterPenalties; // What user actually receives
 
     setState(() {
       _feeAmount = totalFee;
-      _totalAmount = totalDeduction; // This is what gets deducted from balance
+      _totalAmount = totalDeduction; // Original withdrawal amount (what gets deducted from balance)
       _totalWithdraw = totalWithdraw; // This is what user actually receives
       _redemptionPenalty = redemptionPenalty;
       _gatePenalty = gatePenalty;

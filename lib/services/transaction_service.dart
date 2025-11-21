@@ -7,7 +7,11 @@ class TransactionService {
   static final SupabaseClient _supabase = Supabase.instance.client;
 
   /// Calculate withdrawal fee based on amount, current balance, and applied date
-  /// Returns a map with 'fee' and 'totalDeduction'
+  /// Returns a map with 'fee', 'totalDeduction', and 'finalWithdrawAmount'
+  /// 
+  /// Penalties are applied SEQUENTIALLY:
+  /// 1. Redemption penalty (5%) reduces withdrawal amount
+  /// 2. Gate penalty (5%) is applied to the reduced amount if threshold is met
   /// 
   /// Fee logic (TWO penalties applied sequentially):
   /// 1. Redemption penalty (5%): Applies when withdrawing on NON-redemption dates
@@ -43,43 +47,49 @@ class TransactionService {
     print('[TransactionService] Threshold (33.33%): $threshold');
     print('[TransactionService] Is Redemption Date: $isRedemptionDate');
     
-    double fee = 0.0;
-    double withdrawalAfterRedemption = withdrawalAmount;
+    double withdrawalAfterPenalties = withdrawalAmount;
+    double totalFee = 0.0;
     
     // STEP 1: Apply redemption penalty (5% on NON-redemption dates)
-    // This penalty is added to the fee, but we check the NEW withdrawal amount for gate penalty
+    // This reduces the withdrawal amount by 5%
     if (!isRedemptionDate) {
       final redemptionPenalty = withdrawalAmount * 0.05;
-      fee += redemptionPenalty;
-      withdrawalAfterRedemption = withdrawalAmount; // Withdrawal amount stays the same, fee is separate
+      withdrawalAfterPenalties = withdrawalAmount - redemptionPenalty;
+      totalFee += redemptionPenalty;
       print('[TransactionService] ✓ Applied redemption penalty (5%): $redemptionPenalty');
-      print('[TransactionService] Withdrawal after redemption penalty: $withdrawalAfterRedemption');
+      print('[TransactionService] Withdrawal after redemption penalty: $withdrawalAfterPenalties');
     } else {
       print('[TransactionService] ✗ Skipped redemption penalty (redemption date)');
     }
     
-    // STEP 2: Check if withdrawal amount (after redemption penalty consideration) >= 33.33% of balance
-    // If yes, apply gate penalty (5%) to the withdrawal amount
-    final meetsGateThreshold = withdrawalAfterRedemption >= threshold;
-    print('[TransactionService] Gate threshold check: $withdrawalAfterRedemption >= $threshold = $meetsGateThreshold');
+    // STEP 2: Check if original withdrawal amount >= 33.33% of balance
+    // If yes, apply gate penalty (5%) to the NEW withdrawal amount (after redemption penalty)
+    final meetsGateThreshold = withdrawalAmount >= threshold;
+    print('[TransactionService] Gate threshold check: $withdrawalAmount >= $threshold = $meetsGateThreshold');
     
     if (meetsGateThreshold) {
-      // Apply gate penalty to the withdrawal amount
-      final gatePenalty = withdrawalAfterRedemption * 0.05;
-      fee += gatePenalty;
-      print('[TransactionService] ✓✓✓ APPLIED GATE PENALTY (5% of $withdrawalAfterRedemption): $gatePenalty ✓✓✓');
+      // Apply gate penalty to the withdrawal amount AFTER redemption penalty
+      final gatePenalty = withdrawalAfterPenalties * 0.05;
+      withdrawalAfterPenalties = withdrawalAfterPenalties - gatePenalty;
+      totalFee += gatePenalty;
+      print('[TransactionService] ✓✓✓ APPLIED GATE PENALTY (5%): $gatePenalty ✓✓✓');
+      print('[TransactionService] Final withdrawal amount: $withdrawalAfterPenalties');
     } else {
       print('[TransactionService] ✗✗✗ SKIPPED GATE PENALTY (withdrawal < 33.33%) ✗✗✗');
     }
 
     print('[TransactionService] === FEE CALCULATION END ===');
-    print('[TransactionService] Total fee: $fee');
-    print('[TransactionService] Total deduction: ${withdrawalAmount + fee}');
-    print('[TransactionService] Breakdown: Withdrawal ($withdrawalAmount) + Fee ($fee) = Total (${withdrawalAmount + fee})');
+    print('[TransactionService] Total fee deducted: $totalFee');
+    print('[TransactionService] Final withdrawal amount: $withdrawalAfterPenalties');
+    print('[TransactionService] Total deduction from balance: ${withdrawalAmount}');
     
+    // Return the fee amount and total deduction
+    // Total deduction is still the original withdrawal amount (what gets deducted from balance)
+    // But the actual amount user receives is withdrawalAmount - totalFee
     return {
-      'fee': fee,
-      'totalDeduction': withdrawalAmount + fee,
+      'fee': totalFee,
+      'totalDeduction': withdrawalAmount, // Original withdrawal amount (what gets deducted from balance)
+      'finalWithdrawAmount': withdrawalAfterPenalties, // What user actually receives
     };
   }
 
