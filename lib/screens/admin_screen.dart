@@ -4055,13 +4055,26 @@ class _AdminScreenState extends State<AdminScreen> {
           })
           .eq('id', subscriptionResponse['id'] as int);
 
-      // Delete the yield distribution record
+      // Delete the yield distribution record from user_yield_distributions
+      // Note: This requires an admin delete policy in RLS (see rls_policies_yields_delete.sql)
       await supabase
           .from('user_yield_distributions')
           .delete()
-          .eq('id', transaction.id);
+          .eq('id', transaction.id)
+          .eq('user_uid', userId);
 
-      print('[AdminScreen] Deleted yield distribution ${transaction.id}, reverted balance from ${currentBalance.toStringAsFixed(2)} to ${revertedBalanceRounded.toStringAsFixed(2)}');
+      // Verify deletion by trying to fetch the record
+      final verifyDelete = await supabase
+          .from('user_yield_distributions')
+          .select('id')
+          .eq('id', transaction.id)
+          .maybeSingle();
+
+      if (verifyDelete != null) {
+        throw Exception('Failed to delete yield distribution from user_yield_distributions table. RLS policy may be blocking deletion. Please run rls_policies_yields_delete.sql');
+      }
+
+      print('[AdminScreen] Deleted yield distribution ${transaction.id} from user_yield_distributions, reverted balance from ${currentBalance.toStringAsFixed(2)} to ${revertedBalanceRounded.toStringAsFixed(2)}');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4295,15 +4308,22 @@ class _AdminScreenState extends State<AdminScreen> {
           .eq('id', subscriptionResponse['id'] as int);
 
       // Delete the transaction record from usertransactions
-      final deleteResponse = await supabase
+      // Note: This requires an admin delete policy in RLS (see rls_policies_usertransactions_delete.sql)
+      await supabase
           .from('usertransactions')
           .delete()
           .eq('id', transaction.id)
-          .eq('user_uid', userId)
-          .select();
+          .eq('user_uid', userId);
 
-      if (deleteResponse.isEmpty) {
-        throw Exception('Failed to delete deposit transaction from usertransactions table');
+      // Verify deletion by trying to fetch the record
+      final verifyDelete = await supabase
+          .from('usertransactions')
+          .select('id')
+          .eq('id', transaction.id)
+          .maybeSingle();
+
+      if (verifyDelete != null) {
+        throw Exception('Failed to delete deposit transaction from usertransactions table. RLS policy may be blocking deletion. Please run rls_policies_usertransactions_delete.sql');
       }
 
       print('[AdminScreen] Deleted deposit ${transaction.id} from usertransactions, reverted balance from ${currentBalance.toStringAsFixed(2)} to ${revertedBalanceRounded.toStringAsFixed(2)}');
@@ -4435,15 +4455,22 @@ class _AdminScreenState extends State<AdminScreen> {
           .eq('id', subscriptionResponse['id'] as int);
 
       // Delete the transaction record from usertransactions
-      final deleteResponse = await supabase
+      // Note: This requires an admin delete policy in RLS (see rls_policies_usertransactions_delete.sql)
+      await supabase
           .from('usertransactions')
           .delete()
           .eq('id', transaction.id)
-          .eq('user_uid', userId)
-          .select();
+          .eq('user_uid', userId);
 
-      if (deleteResponse.isEmpty) {
-        throw Exception('Failed to delete withdrawal transaction from usertransactions table');
+      // Verify deletion by trying to fetch the record
+      final verifyDelete = await supabase
+          .from('usertransactions')
+          .select('id')
+          .eq('id', transaction.id)
+          .maybeSingle();
+
+      if (verifyDelete != null) {
+        throw Exception('Failed to delete withdrawal transaction from usertransactions table. RLS policy may be blocking deletion. Please run rls_policies_usertransactions_delete.sql');
       }
 
       print('[AdminScreen] Deleted withdrawal ${transaction.id} from usertransactions, reverted balance from ${currentBalance.toStringAsFixed(2)} to ${revertedBalanceRounded.toStringAsFixed(2)}');
