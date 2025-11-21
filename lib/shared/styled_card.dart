@@ -1,4 +1,4 @@
-import 'package:ac_app/shared/styled_text.dart';
+ import 'package:ac_app/shared/styled_text.dart';
 import 'package:ac_app/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
@@ -36,8 +36,7 @@ import 'package:intl/intl.dart';
 //                   flex: 3,
 //                   child: Column(
 //                     crossAxisAlignment: CrossAxisAlignment.start,
-//                     children: [
-//                       PrimaryText('Current Balance', fontSize: 18, color: AppColors.secondaryTextColor),
+//                     children: [Flor: AppColors.secondaryTextColor),
 //                       Row(
 //                         crossAxisAlignment: CrossAxisAlignment.start,
 //                         children: [
@@ -316,7 +315,8 @@ class AFFCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         // borderRadius: BorderRadius.all(Radius.circular(16)),
-        highlightColor: Colors.grey.withOpacity(0.5),
+        highlightColor: Colors.white.withOpacity(0.2),
+        splashColor: Colors.white.withOpacity(0.1),
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Column(
@@ -330,13 +330,18 @@ class AFFCard extends StatelessWidget {
                       TitleText(title, color: Colors.white, fontSize: 25,),
                       Row(
                         children: [
-                          TitleText(
-                            '${yield >= 0 ? '+' : ''}${yield.toStringAsFixed(2)}%', 
-                            fontSize: 18, 
-                            color: Colors.white
-                          ),
-                          const SizedBox(width: 7,),
-                          PrimaryTextW('Last updated: ${date}', fontSize: 13,)
+                          if (yield != 0.0 || title != 'FAQ')
+                            TitleText(
+                              '${yield >= 0 ? '+' : ''}${yield.toStringAsFixed(2)}%', 
+                              fontSize: 18, 
+                              color: Colors.white
+                            ),
+                          if (yield != 0.0 || title != 'FAQ')
+                            const SizedBox(width: 7,),
+                          PrimaryTextW(
+                            title == 'FAQ' ? date : 'Last updated: ${date}', 
+                            fontSize: 13,
+                          )
                         ],
                       )
                     ],

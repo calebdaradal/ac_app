@@ -163,40 +163,20 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          title: Row(
+            children: [
+              Icon(Icons.help_outline, color: AppColors.primaryColor),
+              const SizedBox(width: 12),
+              const TitleText('FAQ', fontSize: 20),
+            ],
           ),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TitleText(
-                      'Frequently Asked Questions',
-                      fontSize: 22,
-                      color: AppColors.primaryColor,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: _FAQAccordion(),
-                  ),
-                ),
-              ],
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.9,
+              child: _FAQAccordion(),
             ),
           ),
         );
@@ -300,16 +280,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              
-              // FAQ Button (left of hamburger menu)
-              IconButton(
-                icon: Icon(Icons.help_outline, color: AppColors.primaryColor, size: 28),
-                onPressed: () {
-                  _showFAQDialog(context);
-                },
-                tooltip: 'FAQ',
-              ),
-              const SizedBox(width: 4),
               
               Expanded(
                 child: SizedBox(),
@@ -424,6 +394,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       totalYield: _aggregatedData?.totalYield ?? 0.0,
                 ),
                 
+                // FAQ Card
+                AFFCard(
+                  title: 'FAQ',
+                  yield: 0.0,
+                  date: 'Frequently Asked Questions',
+                  onTap: () {
+                    _showFAQDialog(context);
+                  },
+                  color: const Color.fromRGBO(255, 152, 0, 1), // Vibrant orange color
+                ),
+                
                 AFFCard(
                   title: 'Ascendo Futures Fund',
                   yield: _affSummary?.latestYieldPercent ?? 0.0,
@@ -433,7 +414,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   color: AppColors.primaryColor,
                 ),
-    
+
                 AFFCard(
                   title: 'SOL/ETH Staking Pool',
                   yield: _stkSummary?.latestYieldPercent ?? 0.0,
@@ -485,27 +466,23 @@ class _FAQAccordionState extends State<_FAQAccordion> {
         _buildFAQItem(
           index: 0,
           title: 'Gate Penalties',
-          content: '''Gate penalties are additional fees that apply when you withdraw 33.33% or more of your current balance.
+          content: '''A 5% fee applies when withdrawing 33.33% or more of your balance.
 
-• Amount: 5% of your withdrawal amount
-• When it applies: Always applies when withdrawal amount ≥ 33.33% of your current balance
-• Example: If you withdraw ₱7,000 from a balance of ₱9,800 (71.4% of balance), a 5% gate penalty of ₱350 will apply
+Example: Withdrawing ₱7,000 from ₱9,800 balance triggers a ₱350 gate penalty.
 
-Note: Gate penalties apply regardless of whether it's a redemption date or not.''',
+Applies on all dates, including redemption dates.''',
         ),
         const SizedBox(height: 12),
         _buildFAQItem(
           index: 1,
           title: 'Redemption Penalties',
-          content: '''Redemption penalties are fees that apply when you withdraw on non-redemption dates.
+          content: '''A 5% fee applies when withdrawing on non-redemption dates.
 
-• Amount: 5% of your withdrawal amount
-• When it applies: Always applies when withdrawing on dates that are NOT redemption dates
-• Redemption dates: March 30-31, June 29-30, September 29-30, December 30-31
+Redemption dates: March 30-31, June 29-30, September 29-30, December 30-31
 
-Example: If you withdraw ₱5,000 on a regular day (not a redemption date), a 5% redemption penalty of ₱250 will apply.
+Example: Withdrawing ₱5,000 on a regular day triggers a ₱250 redemption penalty.
 
-Tip: Request withdrawals on redemption dates to avoid redemption penalties. However, gate penalties may still apply if you withdraw 33.33% or more of your balance.''',
+Tip: Withdraw on redemption dates to avoid this penalty. Gate penalties may still apply if withdrawing 33.33% or more.''',
         ),
       ],
     );
@@ -562,26 +539,24 @@ Tip: Request withdrawals on redemption dates to avoid redemption penalties. Howe
               ),
             ),
           ),
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: Column(
-              children: [
-                Divider(height: 1, color: Colors.grey.shade300),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SecondaryText(
-                    content,
-                    fontSize: 14,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-            crossFadeState: isExpanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
+          AnimatedSize(
             duration: const Duration(milliseconds: 300),
-            sizeCurve: Curves.easeInOut,
+            curve: Curves.easeInOut,
+            child: isExpanded
+                ? Column(
+                    children: [
+                      Divider(height: 1, color: Colors.grey.shade300),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SecondaryText(
+                          content,
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),

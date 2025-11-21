@@ -12,7 +12,6 @@ import 'package:ac_app/utils/redemption_dates.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_textfield.dart';
 import 'package:ac_app/shared/styled_card.dart';
-import 'package:ac_app/shared/success_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -963,6 +962,8 @@ class _AdminScreenState extends State<AdminScreen> {
                             _loadUserStats(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
                             _loadUserTransactions(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
                           ]);
+                          // Reload subscription data
+                          await _loadUserSubscriptionData(_selectedUser!.uid, _selectedVehicle!.id);
                         }
                       }
                     } catch (e) {
@@ -1680,6 +1681,38 @@ class _AdminScreenState extends State<AdminScreen> {
                       ),
                       const SizedBox(height: 16),
 
+                      // Disclaimer about 2% deduction
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.orange.shade200,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              color: Colors.orange.shade700,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: SecondaryText(
+                                'A 2% fee will be deducted from the deposit amount before it is added to the user\'s balance.',
+                                fontSize: 13,
+                                color: Colors.orange.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
                       // Date Picker
                       const SecondaryText('Applied Date', fontSize: 14),
                       const SizedBox(height: 8),
@@ -1772,49 +1805,100 @@ class _AdminScreenState extends State<AdminScreen> {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const TitleText('Confirm Deposit Application', fontSize: 18),
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        backgroundColor: Colors.white,
+                        surfaceTintColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: Row(
                           children: [
-                            SecondaryText(
-                              'User: ${selectedUser!.fullName}',
-                              fontSize: 14,
-                            ),
-                            const SizedBox(height: 8),
-                            SecondaryText(
-                              'Vehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}',
-                              fontSize: 14,
-                            ),
-                            const SizedBox(height: 8),
-                            SecondaryText(
-                              'Amount: ₱${_formatCurrency(amount)}',
-                              fontSize: 14,
-                            ),
-                            const SizedBox(height: 8),
-                            SecondaryText(
-                              'Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
-                              fontSize: 14,
-                            ),
-                            const SizedBox(height: 16),
-                            SecondaryText(
-                              'This will create a deposit transaction for the selected user.',
-                              fontSize: 13,
-                              color: Colors.orange,
-                            ),
+                            Icon(Icons.account_balance_wallet, color: AppColors.primaryColor, size: 24),
+                            const SizedBox(width: 12),
+                            const TitleText('Confirm Deposit Application', fontSize: 20),
                           ],
+                        ),
+                        content: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Deposit details in a cleaner format
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.grey.shade200,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildDetailRow('User', selectedUser!.fullName),
+                                    const SizedBox(height: 12),
+                                    _buildDetailRow('Vehicle', selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'),
+                                    const SizedBox(height: 12),
+                                    _buildDetailRow('Amount', '₱${_formatCurrency(amount)}'),
+                                    const SizedBox(height: 12),
+                                    _buildDetailRow('Date', DateFormat('MMM dd, yyyy').format(selectedDate)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Disclaimer
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.orange.shade200,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      color: Colors.orange.shade700,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: SecondaryText(
+                                        'A 2% fee will be deducted from the deposit amount. This will create a verified deposit transaction for the selected user.',
+                                        fontSize: 13,
+                                        color: Colors.orange.shade900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, false),
-                            child: const SecondaryText('Cancel', fontSize: 14),
+                            child: SecondaryText(
+                              'Cancel',
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
                           ElevatedButton(
                             onPressed: () => Navigator.pop(ctx, true),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryColor,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                             ),
-                            child: const Text('Confirm'),
+                            child: const Text(
+                              'Confirm',
+                              style: TextStyle(color: Colors.white),
+                            ),
                           ),
                         ],
                       ),
@@ -1838,10 +1922,57 @@ class _AdminScreenState extends State<AdminScreen> {
                       if (mounted) {
                         Navigator.pop(dialogContext);
                         
-                        // Show success dialog
-                        await showSuccessDialog(
-                          context,
-                          'Deposit applied successfully!\n\nUser: ${selectedUser!.fullName}\nVehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}\nAmount: ₱${_formatCurrency(amount)}',
+                        // Show success dialog matching admin style
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: Colors.white,
+                            surfaceTintColor: Colors.transparent,
+                            title: Row(
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                                const SizedBox(width: 12),
+                                const TitleText('Deposit Applied Successfully', fontSize: 18),
+                              ],
+                            ),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SecondaryText(
+                                  'User: ${selectedUser!.fullName}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Vehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Amount: ₱${_formatCurrency(amount)}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
+                                  fontSize: 14,
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryColor,
+                                ),
+                                child: const Text(
+                                  'OK',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
                         );
                         
                         // Refresh transactions
@@ -1853,6 +1984,10 @@ class _AdminScreenState extends State<AdminScreen> {
                             _loadUserStats(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
                             _loadUserTransactions(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
                           ]);
+                          // Reload subscription data if vehicle is selected
+                          if (_selectedVehicle != null) {
+                            await _loadUserSubscriptionData(_selectedUser!.uid, _selectedVehicle!.id);
+                          }
                         }
                       }
                     } catch (e) {
@@ -1962,10 +2097,13 @@ class _AdminScreenState extends State<AdminScreen> {
                 });
               }
             }
-            // Calculate fee and total withdrawal in real-time using TransactionService
+            // Calculate fee and total withdrawal in real-time using same logic as user withdrawal
             double withdrawalAmount = 0.0;
             double feeAmount = 0.0;
             double totalWithdrawal = 0.0;
+            double redemptionPenalty = 0.0;
+            double gatePenalty = 0.0;
+            double totalWithdraw = 0.0; // What user actually receives
             
             if (amountController.text.isNotEmpty) {
               final parsedAmount = double.tryParse(amountController.text.trim());
@@ -1973,14 +2111,28 @@ class _AdminScreenState extends State<AdminScreen> {
                 withdrawalAmount = (parsedAmount * 100).round() / 100.0;
                 
                 if (currentBalance != null && currentBalance! > 0) {
-                  // Use TransactionService to calculate fee with redemption date logic
-                  final feeCalc = TransactionService.calculateWithdrawalFee(
-                    withdrawalAmount: withdrawalAmount,
-                    currentBalance: currentBalance!,
-                    appliedDate: selectedDate,
-                  );
-                  feeAmount = feeCalc['fee']!;
-                  totalWithdrawal = feeCalc['totalDeduction']!;
+                  // Calculate penalties sequentially (same logic as user withdrawal screen)
+                  final isRedemptionDate = RedemptionDates.isRedemptionDate(selectedDate);
+                  final threshold = currentBalance! / 3.0;
+                  
+                  double withdrawalAfterPenalties = withdrawalAmount;
+                  
+                  // STEP 1: Apply redemption penalty (5% on NON-redemption dates)
+                  if (!isRedemptionDate) {
+                    redemptionPenalty = withdrawalAmount * 0.05;
+                    withdrawalAfterPenalties = withdrawalAmount - redemptionPenalty;
+                  }
+                  
+                  // STEP 2: Check if original withdrawal amount >= 33.33% of balance
+                  // If yes, apply gate penalty (5%) to the NEW withdrawal amount (after redemption penalty)
+                  if (withdrawalAmount >= threshold) {
+                    gatePenalty = withdrawalAfterPenalties * 0.05;
+                    withdrawalAfterPenalties = withdrawalAfterPenalties - gatePenalty;
+                  }
+                  
+                  feeAmount = redemptionPenalty + gatePenalty;
+                  totalWithdrawal = withdrawalAmount; // Original withdrawal amount (what gets deducted from balance)
+                  totalWithdraw = withdrawalAfterPenalties; // What user actually receives
                 }
               }
             }
@@ -2204,6 +2356,7 @@ class _AdminScreenState extends State<AdminScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Warning/Info message
                               Row(
                                 children: [
                                   Icon(
@@ -2221,41 +2374,87 @@ class _AdminScreenState extends State<AdminScreen> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              _buildDetailRow('Withdrawal Amount', _formatCurrency(withdrawalAmount)),
-                              if (feeAmount > 0)
-                                _buildDetailRow('Fee (5%)', _formatCurrency(feeAmount)),
-                              const Divider(height: 16),
+                              const SizedBox(height: 12),
+                              // Penalties breakdown (matching user withdrawal screen)
+                              if (feeAmount > 0) ...[
+                                if (redemptionPenalty > 0) ...[
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      SecondaryText(
+                                        'Redemption Penalty (5%):',
+                                        fontSize: 14,
+                                        color: Colors.orange.shade700,
+                                      ),
+                                      SecondaryText(
+                                        '₱${redemptionPenalty.toStringAsFixed(2)}',
+                                        fontSize: 14,
+                                        color: Colors.orange.shade700,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
+                                if (gatePenalty > 0) ...[
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      TitleText(
+                                        'Gate Penalty (5%):',
+                                        fontSize: 14,
+                                        color: Colors.red.shade700,
+                                      ),
+                                      TitleText(
+                                        '₱${gatePenalty.toStringAsFixed(2)}',
+                                        fontSize: 14,
+                                        color: Colors.red.shade700,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Divider(height: 1),
+                                  const SizedBox(height: 12),
+                                ] else if (redemptionPenalty > 0) ...[
+                                  const SizedBox(height: 12),
+                                  const Divider(height: 1),
+                                  const SizedBox(height: 12),
+                                ],
+                              ],
+                              // Total Withdraw (what user receives)
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  SecondaryText('Total Deduction', fontSize: 13, color: Colors.grey.shade600),
-                                  Text(
-                                    _formatCurrency(totalWithdrawal),
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.red.shade700,
-                                    ),
+                                  TitleText(
+                                    'Total Withdraw:',
+                                    fontSize: 18,
+                                    color: AppColors.primaryColor,
+                                  ),
+                                  TitleText(
+                                    '₱${totalWithdraw.toStringAsFixed(2)}',
+                                    fontSize: 18,
+                                    color: AppColors.primaryColor,
                                   ),
                                 ],
                               ),
-                              if (currentBalance != null) ...[
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    SecondaryText('Balance After', fontSize: 13, color: Colors.grey.shade600),
-                                    Text(
-                                      _formatCurrency(currentBalance! - totalWithdrawal),
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                              const SizedBox(height: 12),
+                              const Divider(height: 1),
+                              const SizedBox(height: 12),
+                              // Balance After
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  SecondaryText(
+                                    'Balance After:',
+                                    fontSize: 14,
+                                    color: Colors.black87,
+                                  ),
+                                  TitleText(
+                                    '₱${(currentBalance! - totalWithdrawal).toStringAsFixed(2)}',
+                                    fontSize: 16,
+                                    color: AppColors.primaryColor,
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -2427,7 +2626,10 @@ class _AdminScreenState extends State<AdminScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red.shade700,
                             ),
-                            child: const Text('Confirm'),
+                            child: const Text(
+                              'Confirm',
+                              style: TextStyle(color: Colors.white),
+                            ),
                           ),
                         ],
                       ),
@@ -2451,17 +2653,70 @@ class _AdminScreenState extends State<AdminScreen> {
                       if (mounted) {
                         Navigator.pop(dialogContext);
                         
-                        // Show success dialog
-                        String successMessage = 'Withdrawal applied successfully!\n\n';
-                        successMessage += 'User: ${selectedUser!.fullName}\n';
-                        successMessage += 'Vehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}\n';
-                        successMessage += 'Withdrawal: ₱${_formatCurrency(withdrawalAmount)}\n';
-                        if (feeAmount > 0) {
-                          successMessage += 'Fee: ₱${_formatCurrency(feeAmount)}\n';
-                        }
-                        successMessage += 'Total: ₱${_formatCurrency(totalWithdrawal)}';
-                        
-                        await showSuccessDialog(context, successMessage);
+                        // Show success dialog matching admin style
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: Colors.white,
+                            surfaceTintColor: Colors.transparent,
+                            title: Row(
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                                const SizedBox(width: 12),
+                                const TitleText('Withdrawal Applied Successfully', fontSize: 18),
+                              ],
+                            ),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SecondaryText(
+                                  'User: ${selectedUser!.fullName}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Vehicle: ${selectedVehicleId == 1 ? 'Ascendo Futures Fund' : 'SOL/ETH Staking Pool'}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Withdrawal: ₱${_formatCurrency(withdrawalAmount)}',
+                                  fontSize: 14,
+                                ),
+                                if (feeAmount > 0) ...[
+                                  const SizedBox(height: 8),
+                                  SecondaryText(
+                                    'Fee: ₱${_formatCurrency(feeAmount)}',
+                                    fontSize: 14,
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Total Deduction: ₱${_formatCurrency(totalWithdrawal)}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
+                                  fontSize: 14,
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryColor,
+                                ),
+                                child: const Text(
+                                  'OK',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
                         
                         // Refresh transactions
                         _loadTransactions();
@@ -2472,6 +2727,10 @@ class _AdminScreenState extends State<AdminScreen> {
                             _loadUserStats(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
                             _loadUserTransactions(_selectedUser!.uid, vehicleId: _selectedVehicle?.id),
                           ]);
+                          // Reload subscription data if vehicle is selected
+                          if (_selectedVehicle != null) {
+                            await _loadUserSubscriptionData(_selectedUser!.uid, _selectedVehicle!.id);
+                          }
                         }
                       }
                     } catch (e) {
