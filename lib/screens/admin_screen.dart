@@ -1405,7 +1405,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                   if (_selectedUser?.uid == user.uid) {
                                     if (_selectedUserVehicle != null) {
                                       await _loadUserSubscriptionData(user.uid, _selectedUserVehicle!.id);
-                                      await _loadUserTransactions(user.uid, _selectedUserVehicle!.id);
+                                      await _loadUserTransactions(user.uid, vehicleId: _selectedUserVehicle!.id);
                                     }
                                   }
                                 },
@@ -2707,13 +2707,13 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() {
         _selectedUser = null;
         _userTransactions = [];
-<<<<<<< HEAD
         _userVehicles = [];
         _selectedUserVehicle = null;
         _selectedUserSubscription = null;
-=======
         _selectedVehicle = null;
->>>>>>> refs/remotes/origin/master
+        _userCurrentBalance = 0.0;
+        _userTotalContributions = 0.0;
+        _userTotalYield = 0.0;
       });
       return;
     }
@@ -2721,10 +2721,13 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() {
       _selectedUser = user;
       _userTransactions = [];
-<<<<<<< HEAD
       _userVehicles = [];
       _selectedUserVehicle = null;
       _selectedUserSubscription = null;
+      _selectedVehicle = null;
+      _userCurrentBalance = 0.0;
+      _userTotalContributions = 0.0;
+      _userTotalYield = 0.0;
     });
     
     // Load user's vehicles
@@ -2738,7 +2741,7 @@ class _AdminScreenState extends State<AdminScreen> {
         });
         // Load subscription data and transactions for first vehicle
         await _loadUserSubscriptionData(user.uid, firstVehicle.id);
-        await _loadUserTransactions(user.uid, firstVehicle.id);
+        await _loadUserTransactions(user.uid, vehicleId: firstVehicle.id);
       } else if (mounted) {
         setState(() {
           _userVehicles = [];
@@ -2753,6 +2756,11 @@ class _AdminScreenState extends State<AdminScreen> {
         );
       }
     }
+    
+    // Also load all vehicles for the filter dropdown
+    await _loadVehicles();
+    // Load stats with optional vehicle filter
+    await _loadUserStats(user.uid, vehicleId: _selectedVehicle?.id);
   }
 
   Future<void> _loadUserSubscriptionData(String userId, int vehicleId) async {
@@ -2812,19 +2820,9 @@ class _AdminScreenState extends State<AdminScreen> {
         setState(() {
           _selectedUserSubscription = null;
           _isLoadingUserSubscription = false;
-=======
-      _selectedVehicle = null;
-      _userCurrentBalance = 0.0;
-      _userTotalContributions = 0.0;
-      _userTotalYield = 0.0;
-    });
-    
-    // Load vehicles, transaction history, and stats for selected user
-    await _loadVehicles();
-    await Future.wait([
-      _loadUserTransactions(user.uid),
-      _loadUserStats(user.uid),
-    ]);
+        });
+      }
+    }
   }
 
   Future<void> _loadUserStats(String userId, {int? vehicleId}) async {
@@ -2870,15 +2868,11 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         setState(() {
           _isLoadingUserStats = false;
->>>>>>> refs/remotes/origin/master
         });
       }
     }
   }
 
-<<<<<<< HEAD
-  Future<void> _loadUserTransactions(String userId, int? vehicleId) async {
-=======
   Future<void> _loadVehicles() async {
     setState(() => _isLoadingVehicles = true);
     try {
@@ -2912,36 +2906,23 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _loadUserTransactions(String userId, {int? vehicleId}) async {
->>>>>>> refs/remotes/origin/master
     setState(() => _isLoadingTransactions = true);
     
     try {
       final supabase = Supabase.instance.client;
       List<TransactionHistoryItem> allTransactions = [];
       
-<<<<<<< HEAD
-      // Fetch user transactions (deposits and withdrawals) for specific vehicle
-      var query = supabase
-=======
       // Fetch user transactions (deposits and withdrawals) - filter by vehicle if selected
       var userTransactionsQuery = supabase
->>>>>>> refs/remotes/origin/master
           .from('usertransactions')
           .select('id, transaction_id, amount, status, applied_at, created_at, vehicle_id')
           .eq('user_uid', userId);
       
       if (vehicleId != null) {
-<<<<<<< HEAD
-        query = query.eq('vehicle_id', vehicleId);
-      }
-      
-      final userTransactionsResponse = await query;
-=======
         userTransactionsQuery = userTransactionsQuery.eq('vehicle_id', vehicleId);
       }
       
       final userTransactionsResponse = await userTransactionsQuery;
->>>>>>> refs/remotes/origin/master
       
       for (var trans in userTransactionsResponse) {
         final transactionTypeId = trans['transaction_id'] as int;
@@ -3000,29 +2981,17 @@ class _AdminScreenState extends State<AdminScreen> {
         ));
       }
       
-<<<<<<< HEAD
-      // Fetch yield distributions for specific vehicle
-      var yieldQuery = supabase
-=======
       // Fetch yield distributions - filter by vehicle if selected
       var yieldDistributionsQuery = supabase
->>>>>>> refs/remotes/origin/master
           .from('user_yield_distributions')
           .select('id, net_yield, gross_yield, balance_before, yield_id, vehicle_id, yields!inner(yield_type, yield_amount, applied_date, created_at)')
           .eq('user_uid', userId);
       
       if (vehicleId != null) {
-<<<<<<< HEAD
-        yieldQuery = yieldQuery.eq('vehicle_id', vehicleId);
-      }
-      
-      final yieldDistributions = await yieldQuery;
-=======
         yieldDistributionsQuery = yieldDistributionsQuery.eq('vehicle_id', vehicleId);
       }
       
       final yieldDistributions = await yieldDistributionsQuery;
->>>>>>> refs/remotes/origin/master
       
       for (var yieldDist in yieldDistributions) {
         final netYield = (yieldDist['net_yield'] as num).toDouble();
@@ -3621,7 +3590,6 @@ class _AdminScreenState extends State<AdminScreen> {
             
             const SizedBox(height: 32),
             
-<<<<<<< HEAD
             // Vehicle selector (only show if user is selected and has vehicles)
             if (_selectedUser != null && 
                 _userVehicles.isNotEmpty && 
@@ -3665,14 +3633,14 @@ class _AdminScreenState extends State<AdminScreen> {
                       _selectedUserVehicle = vehicleFromList;
                     });
                     await _loadUserSubscriptionData(_selectedUser!.uid, vehicleFromList.id);
-                    await _loadUserTransactions(_selectedUser!.uid, vehicleFromList.id);
+                    await _loadUserTransactions(_selectedUser!.uid, vehicleId: vehicleFromList.id);
                   }
                 },
               ),
               const SizedBox(height: 24),
             ],
             
-            // HomeCard - Account Summary
+            // HomeCard - Account Summary (vehicle-specific if available, otherwise show general stats)
             if (_selectedUserSubscription != null && !_isLoadingUserSubscription) ...[
               HomeCard(
                 totalContributions: _selectedUserSubscription!.totalContributions,
@@ -3687,17 +3655,8 @@ class _AdminScreenState extends State<AdminScreen> {
                 child: Center(child: CircularProgressIndicator()),
               ),
               const SizedBox(height: 24),
-            ],
-            
-            // Transaction History Section
-=======
-            // User Stats Section - using HomeCard layout (same as vehicle panel)
-            if (_isLoadingUserStats)
-              const Padding(
-                padding: EdgeInsets.all(20.0),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else
+            ] else if (!_isLoadingUserStats) ...[
+              // Show general user stats if no vehicle-specific subscription
               HomeCard(
                 currentBalance: _userCurrentBalance,
                 yield: _userTotalContributions > 0 
@@ -3706,9 +3665,10 @@ class _AdminScreenState extends State<AdminScreen> {
                 totalContributions: _userTotalContributions,
                 totalYield: _userTotalYield,
               ),
+              const SizedBox(height: 24),
+            ],
             
             // Transaction History Section with Vehicle Selector
->>>>>>> refs/remotes/origin/master
             Row(
               children: [
                 Expanded(
@@ -3927,7 +3887,7 @@ class _AdminScreenState extends State<AdminScreen> {
           
           // Reload subscription data and transactions for selected vehicle
           await _loadUserSubscriptionData(userId, vehicleToSelect.id);
-          await _loadUserTransactions(userId, vehicleToSelect.id);
+          await _loadUserTransactions(userId, vehicleId: vehicleToSelect.id);
         } else if (mounted) {
           setState(() {
             _userVehicles = [];
