@@ -302,10 +302,19 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                             ),
                             const SizedBox(height: 4.0),
                           ],
-                          SecondaryText(
-                            'Fee Information:\n• 5% fee applies on all withdrawals (waived on redemption dates)\n• Additional 5% penalty when withdrawing 33.33% or more of your balance',
-                            fontSize: 13,
-                            color: Colors.grey.shade700,
+                          Builder(
+                            builder: (context) {
+                              final nextRedemption = RedemptionDates.getNextRedemptionDate();
+                              final redemptionText = nextRedemption != null
+                                  ? RedemptionDates.formatRedemptionDate(nextRedemption)
+                                  : 'TBD';
+                              
+                              return SecondaryText(
+                                'Next redemption period is on $redemptionText. Request withdrawals on redemption dates to avoid redemption fees. Gate fees are still applicable.',
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                              );
+                            },
                           ),
                           const SizedBox(height: 24.0),
                           Padding(

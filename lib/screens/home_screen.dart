@@ -159,6 +159,51 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showFAQDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TitleText(
+                      'Frequently Asked Questions',
+                      fontSize: 22,
+                      color: AppColors.primaryColor,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: _FAQAccordion(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = UserProfileService().profile;
@@ -255,6 +300,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+              
+              // FAQ Button (left of hamburger menu)
+              IconButton(
+                icon: Icon(Icons.help_outline, color: AppColors.primaryColor, size: 28),
+                onPressed: () {
+                  _showFAQDialog(context);
+                },
+                tooltip: 'FAQ',
+              ),
+              const SizedBox(width: 4),
               
               Expanded(
                 child: SizedBox(),
@@ -410,6 +465,125 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _FAQAccordion extends StatefulWidget {
+  @override
+  State<_FAQAccordion> createState() => _FAQAccordionState();
+}
+
+class _FAQAccordionState extends State<_FAQAccordion> {
+  int? _expandedIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _buildFAQItem(
+          index: 0,
+          title: 'Gate Penalties',
+          content: '''Gate penalties are additional fees that apply when you withdraw 33.33% or more of your current balance.
+
+• Amount: 5% of your withdrawal amount
+• When it applies: Always applies when withdrawal amount ≥ 33.33% of your current balance
+• Example: If you withdraw ₱7,000 from a balance of ₱9,800 (71.4% of balance), a 5% gate penalty of ₱350 will apply
+
+Note: Gate penalties apply regardless of whether it's a redemption date or not.''',
+        ),
+        const SizedBox(height: 12),
+        _buildFAQItem(
+          index: 1,
+          title: 'Redemption Penalties',
+          content: '''Redemption penalties are fees that apply when you withdraw on non-redemption dates.
+
+• Amount: 5% of your withdrawal amount
+• When it applies: Always applies when withdrawing on dates that are NOT redemption dates
+• Redemption dates: March 30-31, June 29-30, September 29-30, December 30-31
+
+Example: If you withdraw ₱5,000 on a regular day (not a redemption date), a 5% redemption penalty of ₱250 will apply.
+
+Tip: Request withdrawals on redemption dates to avoid redemption penalties. However, gate penalties may still apply if you withdraw 33.33% or more of your balance.''',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFAQItem({
+    required int index,
+    required String title,
+    required String content,
+  }) {
+    final isExpanded = _expandedIndex == index;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isExpanded ? AppColors.primaryColor : Colors.grey.shade300,
+          width: isExpanded ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () {
+              setState(() {
+                _expandedIndex = isExpanded ? null : index;
+              });
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TitleText(
+                      title,
+                      fontSize: 16,
+                      color: AppColors.primaryColor,
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    child: Icon(
+                      Icons.keyboard_arrow_down,
+                      color: AppColors.primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              children: [
+                Divider(height: 1, color: Colors.grey.shade300),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SecondaryText(
+                    content,
+                    fontSize: 14,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            crossFadeState: isExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 300),
+            sizeCurve: Curves.easeInOut,
+          ),
+        ],
       ),
     );
   }

@@ -39,5 +39,41 @@ class RedemptionDates {
       DateTime(year, 12, 31),
     ];
   }
+  
+  /// Get the next redemption date from today
+  /// Returns the first redemption date that is today or in the future
+  static DateTime? getNextRedemptionDate() {
+    final now = DateTime.now();
+    final currentYear = now.year;
+    final nextYear = currentYear + 1;
+    
+    // Get all redemption dates for current and next year
+    final allDates = [
+      ...getRedemptionDatesForYear(currentYear),
+      ...getRedemptionDatesForYear(nextYear),
+    ];
+    
+    // Find the first date that is today or in the future
+    for (var date in allDates) {
+      // Set time to start of day for comparison
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      final nowOnly = DateTime(now.year, now.month, now.day);
+      
+      if (dateOnly.isAfter(nowOnly) || dateOnly.isAtSameMomentAs(nowOnly)) {
+        return date;
+      }
+    }
+    
+    return null; // Should never happen, but just in case
+  }
+  
+  /// Format redemption date for display (e.g., "March 30, 2026")
+  static String formatRedemptionDate(DateTime date) {
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
 }
 
