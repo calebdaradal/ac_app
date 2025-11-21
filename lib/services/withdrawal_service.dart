@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ac_app/constants/transaction_constants.dart';
 import 'package:ac_app/services/user_profile_service.dart';
+import 'package:ac_app/utils/redemption_dates.dart';
 
 class WithdrawalService {
   static final SupabaseClient _supabase = Supabase.instance.client;
@@ -99,13 +100,25 @@ class WithdrawalService {
       throw Exception('Insufficient balance. Available: $currentBalance, Requested: $withdrawalAmountRounded');
     }
 
+    // Check if applied date is a redemption date
+    final isRedemptionDate = RedemptionDates.isRedemptionDate(appliedDate);
+    
     // Calculate 33.33% threshold
     final threshold = currentBalance * 0.3333;
     
-    // Apply 5% fee if withdrawal exceeds threshold
+    // TWO PENALTIES:
+    // Penalty 1: 5% fee on non-redemption dates (always applies)
+    // Penalty 2: Additional 5% penalty when withdrawing >= 33.33% of balance
     double feeAmount = 0.0;
-    if (withdrawalAmountRounded > threshold) {
-      feeAmount = withdrawalAmountRounded * 0.05;
+    
+    // Penalty 1: 5% fee on non-redemption dates
+    if (!isRedemptionDate) {
+      feeAmount += withdrawalAmountRounded * 0.05;
+    }
+    
+    // Penalty 2: Additional 5% penalty when withdrawing >= 33.33% of balance
+    if (withdrawalAmountRounded >= threshold) {
+      feeAmount += withdrawalAmountRounded * 0.05;
     }
     
     // Round fee to 2 decimal places
@@ -166,6 +179,7 @@ class WithdrawalService {
         });
 
     print('[WithdrawalService] Withdrawal applied successfully');
+    print('[WithdrawalService] Applied date: $appliedDate (Redemption date: $isRedemptionDate)');
     print('[WithdrawalService] Withdrawal amount: $withdrawalAmountRounded');
     print('[WithdrawalService] Fee amount: $feeAmountRounded');
     print('[WithdrawalService] Total deduction: $totalDeductionRounded');

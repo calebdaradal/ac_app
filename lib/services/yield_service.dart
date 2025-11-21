@@ -63,6 +63,19 @@ class YieldService {
     for (var sub in subscriptions) {
       final userUid = sub['user_uid'] as String;
       
+      // Check if user account is active - skip disabled accounts
+      final profileResponse = await _supabase
+          .from('profiles')
+          .select('is_active')
+          .eq('id', userUid)
+          .maybeSingle();
+      
+      final isActive = profileResponse?['is_active'] as bool? ?? true;
+      if (isActive == false) {
+        print('[YieldService] User $userUid: Account is disabled - skipping yield update');
+        continue;
+      }
+      
       // Get all VERIFIED deposits for this user and vehicle up to yield date
       final deposits = await _supabase
           .from('usertransactions')
@@ -143,7 +156,7 @@ class YieldService {
       final subId = sub['id'] as int;
       final userUid = sub['user_uid'] as String;
       
-      // Skip users without eligible balance
+      // Skip users without eligible balance (disabled users are already filtered out in step 2)
       if (!eligibleBalances.containsKey(userUid)) {
         continue;
       }

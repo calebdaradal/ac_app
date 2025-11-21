@@ -104,10 +104,11 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
       return;
     }
 
-    // Use shared fee calculation logic
+    // Use shared fee calculation logic (use current date for fee calculation)
     final feeCalc = TransactionService.calculateWithdrawalFee(
       withdrawalAmount: amount,
       currentBalance: _currentBalance!,
+      appliedDate: DateTime.now(),
     );
 
     setState(() {
@@ -275,7 +276,7 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                             const SizedBox(height: 4.0),
                           ],
                           SecondaryText(
-                            'Withdrawals over 33.33% of balance incur a 5% fee',
+                            'Withdrawals incur a 5% fee on non-redemption dates. Additional 5% penalty applies when withdrawing 33.33% or more of balance.',
                             fontSize: 14,
                             color: Colors.grey,
                           ),

@@ -1,23 +1,46 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ac_app/services/user_profile_service.dart';
 import 'package:ac_app/constants/transaction_constants.dart';
+import 'package:ac_app/utils/redemption_dates.dart';
 
 class TransactionService {
   static final SupabaseClient _supabase = Supabase.instance.client;
 
-  /// Calculate withdrawal fee based on amount and current balance
+  /// Calculate withdrawal fee based on amount, current balance, and applied date
   /// Returns a map with 'fee' and 'totalDeduction'
+  /// 
+  /// Fee logic (TWO penalties):
+  /// 1. 5% fee: ALWAYS applies on non-redemption dates (regardless of amount)
+  /// 2. 33.33% penalty: Additional 5% fee when withdrawing >= 33.33% of current balance
+  /// 
+  /// Examples:
+  /// - Withdraw 10% on non-redemption date: 5% fee only
+  /// - Withdraw 40% on non-redemption date: 5% fee + 5% penalty = 10% total
+  /// - Withdraw 40% on redemption date: 5% penalty only (no 5% base fee)
   static Map<String, double> calculateWithdrawalFee({
     required double withdrawalAmount,
     required double currentBalance,
+    DateTime? appliedDate,
   }) {
+    // Use provided date or default to today
+    final date = appliedDate ?? DateTime.now();
+    
+    // Check if it's a redemption date
+    final isRedemptionDate = RedemptionDates.isRedemptionDate(date);
+    
     // Calculate 33.33% threshold
     final threshold = currentBalance * 0.3333;
     
-    // Apply 5% fee if withdrawal exceeds threshold
     double fee = 0.0;
-    if (withdrawalAmount > threshold) {
-      fee = withdrawalAmount * 0.05;
+    
+    // Penalty 1: 5% fee on non-redemption dates (always applies)
+    if (!isRedemptionDate) {
+      fee += withdrawalAmount * 0.05;
+    }
+    
+    // Penalty 2: Additional 5% penalty when withdrawing >= 33.33% of balance
+    if (withdrawalAmount >= threshold) {
+      fee += withdrawalAmount * 0.05;
     }
 
     return {

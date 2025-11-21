@@ -8,6 +8,7 @@ import 'package:ac_app/services/yield_service.dart';
 import 'package:ac_app/services/deposit_service.dart';
 import 'package:ac_app/services/withdrawal_service.dart';
 import 'package:ac_app/services/avatar_service.dart';
+import 'package:ac_app/utils/redemption_dates.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_textfield.dart';
 import 'package:ac_app/shared/styled_card.dart';
@@ -104,6 +105,27 @@ class _AdminScreenState extends State<AdminScreen> {
           SnackBar(content: Text('Error loading transactions: $e')),
         );
       }
+    }
+  }
+
+  String _getFeeMessage(double feeAmount, double withdrawalAmount, double? currentBalance, DateTime appliedDate) {
+    if (currentBalance == null || currentBalance <= 0) {
+      return 'No fee';
+    }
+    
+    final threshold = currentBalance * 0.3333;
+    final isRedemptionDate = RedemptionDates.isRedemptionDate(appliedDate);
+    final exceedsThreshold = withdrawalAmount >= threshold;
+    
+    if (feeAmount == 0) {
+      return 'No fee (redemption date and withdrawal < 33.33%)';
+    } else if (isRedemptionDate && exceedsThreshold) {
+      return '5% penalty applies (withdrawal >= 33.33% of balance)';
+    } else if (!isRedemptionDate && !exceedsThreshold) {
+      return '5% fee applies (not a redemption date)';
+    } else {
+      // Both penalties apply: non-redemption date AND >= 33.33%
+      return '10% total fee (5% non-redemption + 5% for >= 33.33%)';
     }
   }
 
@@ -1423,7 +1445,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 });
               }
             }
-            // Calculate fee and total withdrawal in real-time
+            // Calculate fee and total withdrawal in real-time using TransactionService
             double withdrawalAmount = 0.0;
             double feeAmount = 0.0;
             double totalWithdrawal = 0.0;
@@ -1434,12 +1456,14 @@ class _AdminScreenState extends State<AdminScreen> {
                 withdrawalAmount = (parsedAmount * 100).round() / 100.0;
                 
                 if (currentBalance != null && currentBalance! > 0) {
-                  final threshold = currentBalance! * 0.3333;
-                  if (withdrawalAmount > threshold) {
-                    feeAmount = (withdrawalAmount * 0.05 * 100).round() / 100.0;
-                  }
-                  totalWithdrawal = (withdrawalAmount + feeAmount) * 100;
-                  totalWithdrawal = totalWithdrawal.round() / 100.0;
+                  // Use TransactionService to calculate fee with redemption date logic
+                  final feeCalc = TransactionService.calculateWithdrawalFee(
+                    withdrawalAmount: withdrawalAmount,
+                    currentBalance: currentBalance!,
+                    appliedDate: selectedDate,
+                  );
+                  feeAmount = feeCalc['fee']!;
+                  totalWithdrawal = feeCalc['totalDeduction']!;
                 }
               }
             }
@@ -1673,9 +1697,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: SecondaryText(
-                                      feeAmount > 0 
-                                          ? '5% fee applies (withdrawal > 33.33% of balance)'
-                                          : 'No fee (withdrawal ≤ 33.33% of balance)',
+                                      _getFeeMessage(feeAmount, withdrawalAmount, currentBalance, selectedDate),
                                       fontSize: 12,
                                       color: feeAmount > 0 ? Colors.orange.shade900 : Colors.green.shade900,
                                     ),
