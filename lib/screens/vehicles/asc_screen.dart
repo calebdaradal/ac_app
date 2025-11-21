@@ -137,7 +137,12 @@ class _AscScreenState extends State<AscScreen> {
       child: GestureDetector(
         onTap: () {
           setState(() {
-            _selectedType = type;
+            // If already selected, toggle it off (reset to all)
+            if (isSelected) {
+              _selectedType = TransactionType.all;
+            } else {
+              _selectedType = type;
+            }
           });
           _applyFilter();
           // Rebuild the sheet content if inside bottom sheet

@@ -63,6 +63,12 @@ class _AdminScreenState extends State<AdminScreen> {
   UserTransactionType _selectedUserType = UserTransactionType.all;
   final ImagePicker _imagePicker = ImagePicker();
   final AvatarService _avatarService = AvatarService();
+  
+  // Vehicle selection for user management
+  List<InvestmentVehicle> _userVehicles = [];
+  InvestmentVehicle? _selectedUserVehicle;
+  UserVehicleSubscription? _selectedUserSubscription;
+  bool _isLoadingUserSubscription = false;
 
   @override
   void initState() {
@@ -936,6 +942,499 @@ class _AdminScreenState extends State<AdminScreen> {
       } catch (e) {
         // Controller already disposed, ignore
         print('[YieldModal] Controller disposal: $e');
+      }
+    });
+  }
+
+  Future<void> _showPersonalYieldDialog(UserProfile user) async {
+    InvestmentVehicle? selectedVehicle;
+    String selectedYieldType = 'Amount';
+    final yieldController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    bool isSubmitting = false;
+    List<InvestmentVehicle> vehicles = [];
+
+    // Load user's vehicles
+    try {
+      vehicles = await YieldService.getUserVehicles(user.uid);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading vehicles: $e')),
+        );
+      }
+      return;
+    }
+
+    if (vehicles.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${user.fullName} is not subscribed to any vehicles')),
+        );
+      }
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              title: Row(
+                children: [
+                  Icon(Icons.person, color: AppColors.primaryColor),
+                  const SizedBox(width: 12),
+                  const TitleText('Apply Personal Yield', fontSize: 20),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.9,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // User info
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: SecondaryText(
+                                'Applying yield to: ${user.fullName} (${user.email})',
+                                fontSize: 12,
+                                color: Colors.blue.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Vehicle Dropdown
+                      const SecondaryText('Investment Vehicle', fontSize: 14),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(247, 249, 252, 1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButtonFormField<InvestmentVehicle>(
+                          value: selectedVehicle,
+                          decoration: InputDecoration(
+                            hintText: 'Select vehicle',
+                            hintStyle: TextStyle(
+                              color: AppColors.titleColor.withOpacity(0.5),
+                            ),
+                            filled: true,
+                            fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: vehicles.map((vehicle) {
+                            return DropdownMenuItem<InvestmentVehicle>(
+                              value: vehicle,
+                              child: Text(
+                                vehicle.vehicleName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setDialogState(() {
+                              selectedVehicle = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Yield Input with Type Dropdown
+                      const SecondaryText('Yield Value', fontSize: 14),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color.fromRGBO(247, 249, 252, 1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: TextField(
+                                controller: yieldController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: InputDecoration(
+                                  hintText: selectedYieldType == 'Amount' ? 'Enter amount' : 'Enter %',
+                                  hintStyle: TextStyle(
+                                    color: AppColors.titleColor.withOpacity(0.5),
+                                  ),
+                                  filled: true,
+                                  fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color.fromRGBO(247, 249, 252, 1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: DropdownButtonFormField<String>(
+                                value: selectedYieldType,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: const Color.fromRGBO(247, 249, 252, 1),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 16,
+                                  ),
+                                ),
+                                items: ['Amount', 'Percentage'].map((type) {
+                                  return DropdownMenuItem<String>(
+                                    value: type,
+                                    child: Text(type == 'Amount' ? '₱' : '%'),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setDialogState(() {
+                                    selectedYieldType = value!;
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Date Picker
+                      const SecondaryText('Applied Date', fontSize: 14),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              selectedDate = picked;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color.fromRGBO(247, 249, 252, 1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today, color: AppColors.primaryColor, size: 20),
+                              const SizedBox(width: 12),
+                              Text(
+                                DateFormat('MMM dd, yyyy').format(selectedDate),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: AppColors.titleColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Info box
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: SecondaryText(
+                                'Performance fee of 20% will be deducted from gross yield. This yield will only apply to ${user.fullName}.',
+                                fontSize: 12,
+                                color: Colors.blue.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: SecondaryText(
+                    'Cancel',
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                StyledButton(
+                  onPressed: isSubmitting ? null : () async {
+                    // Validate inputs
+                    if (selectedVehicle == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a vehicle')),
+                      );
+                      return;
+                    }
+
+                    if (yieldController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter yield value')),
+                      );
+                      return;
+                    }
+
+                    final yieldValue = double.tryParse(yieldController.text.trim());
+                    if (yieldValue == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a valid number')),
+                      );
+                      return;
+                    }
+                    
+                    // For percentage type, validate range
+                    if (selectedYieldType == 'Percentage' && (yieldValue < -100 || yieldValue > 100)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Percentage must be between -100% and 100%')),
+                      );
+                      return;
+                    }
+
+                    // Show confirmation dialog
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: Colors.white,
+                        surfaceTintColor: Colors.transparent,
+                        title: const TitleText('Confirm Personal Yield', fontSize: 18),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SecondaryText(
+                              'User: ${user.fullName}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Vehicle: ${selectedVehicle!.vehicleName}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Yield: ${selectedYieldType == 'Amount' 
+                                ? '${yieldValue >= 0 ? '₱' : '-₱'}${_formatCurrency(yieldValue.abs())}' 
+                                : '${yieldValue >= 0 ? '+' : ''}$yieldValue%'}',
+                              fontSize: 14,
+                              color: yieldValue >= 0 ? null : Colors.red,
+                            ),
+                            const SizedBox(height: 8),
+                            SecondaryText(
+                              'Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
+                              fontSize: 14,
+                            ),
+                            const SizedBox(height: 16),
+                            SecondaryText(
+                              yieldValue < 0 
+                                ? '⚠️ This is a NEGATIVE yield update. ${user.fullName}\'s balance will DECREASE.'
+                                : 'This will update ${user.fullName}\'s balance for this vehicle only.',
+                              fontSize: 13,
+                              color: yieldValue < 0 ? Colors.red : Colors.orange,
+                            ),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const SecondaryText('Cancel', fontSize: 14),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryColor,
+                            ),
+                            child: const Text('Confirm'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm != true) return;
+
+                    // Apply personal yield
+                    setDialogState(() {
+                      isSubmitting = true;
+                    });
+
+                    try {
+                      final result = await YieldService.applyPersonalYield(
+                        userUid: user.uid,
+                        vehicleId: selectedVehicle!.id,
+                        yieldValue: yieldValue,
+                        yieldType: selectedYieldType,
+                        appliedDate: selectedDate,
+                      );
+
+                      if (mounted) {
+                        Navigator.pop(dialogContext);
+                        
+                        // Show success dialog
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: Colors.white,
+                            surfaceTintColor: Colors.transparent,
+                            title: Row(
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                                const SizedBox(width: 12),
+                                const TitleText('Personal Yield Applied', fontSize: 18),
+                              ],
+                            ),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SecondaryText('User: ${user.fullName}', fontSize: 14),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Total AUM: ₱${_formatCurrency(result.totalAum)}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Gross Yield: ₱${_formatCurrency(result.totalGrossYield)}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Performance Fee: ₱${_formatCurrency(result.totalPerformanceFee)}',
+                                  fontSize: 14,
+                                ),
+                                const SizedBox(height: 8),
+                                SecondaryText(
+                                  'Net Yield: ₱${_formatCurrency(result.totalGrossYield - result.totalPerformanceFee)}',
+                                  fontSize: 14,
+                                  color: Colors.green.shade700,
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              ElevatedButton(
+                                onPressed: () async {
+                                  Navigator.pop(ctx);
+                                  // Reload user transactions to show updated balance
+                                  if (_selectedUser?.uid == user.uid) {
+                                    if (_selectedUserVehicle != null) {
+                                      await _loadUserSubscriptionData(user.uid, _selectedUserVehicle!.id);
+                                      await _loadUserTransactions(user.uid, _selectedUserVehicle!.id);
+                                    }
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryColor,
+                                ),
+                                child: const Text('Done'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      setDialogState(() {
+                        isSubmitting = false;
+                      });
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error applying personal yield: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text('Apply Yield'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    // Dispose controller after dialog animation completes
+    Future.delayed(const Duration(milliseconds: 300), () {
+      try {
+        yieldController.dispose();
+      } catch (e) {
+        // Controller already disposed, ignore
+        print('[PersonalYieldModal] Controller disposal: $e');
       }
     });
   }
@@ -2169,6 +2668,9 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() {
         _selectedUser = null;
         _userTransactions = [];
+        _userVehicles = [];
+        _selectedUserVehicle = null;
+        _selectedUserSubscription = null;
       });
       return;
     }
@@ -2176,24 +2678,119 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() {
       _selectedUser = user;
       _userTransactions = [];
+      _userVehicles = [];
+      _selectedUserVehicle = null;
+      _selectedUserSubscription = null;
     });
     
-    // Load transaction history for selected user
-    await _loadUserTransactions(user.uid);
+    // Load user's vehicles
+    try {
+      final vehicles = await YieldService.getUserVehicles(user.uid);
+      if (mounted && vehicles.isNotEmpty) {
+        final firstVehicle = vehicles.first;
+        setState(() {
+          _userVehicles = vehicles;
+          _selectedUserVehicle = firstVehicle; // Use vehicle from the list
+        });
+        // Load subscription data and transactions for first vehicle
+        await _loadUserSubscriptionData(user.uid, firstVehicle.id);
+        await _loadUserTransactions(user.uid, firstVehicle.id);
+      } else if (mounted) {
+        setState(() {
+          _userVehicles = [];
+          _selectedUserVehicle = null;
+        });
+      }
+    } catch (e) {
+      print('[AdminScreen] Error loading user vehicles: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading vehicles: $e')),
+        );
+      }
+    }
   }
 
-  Future<void> _loadUserTransactions(String userId) async {
+  Future<void> _loadUserSubscriptionData(String userId, int vehicleId) async {
+    setState(() => _isLoadingUserSubscription = true);
+    try {
+      final supabase = Supabase.instance.client;
+      final subscriptionResponse = await supabase
+          .from('userinvestmentvehicle')
+          .select('id, vehicle_id, registered_at, total_contrib, current_balance')
+          .eq('user_uid', userId)
+          .eq('vehicle_id', vehicleId)
+          .maybeSingle();
+      
+      if (subscriptionResponse != null) {
+        // Get yield distributions to check if user has yields
+        final hasYieldDistributions = await supabase
+            .from('user_yield_distributions')
+            .select('id')
+            .eq('user_uid', userId)
+            .eq('vehicle_id', vehicleId)
+            .limit(1)
+            .maybeSingle();
+
+        final totalContrib = (subscriptionResponse['total_contrib'] as num).toDouble();
+        final currentBalance = (subscriptionResponse['current_balance'] as num?)?.toDouble() ?? 0.0;
+        final totalYield = currentBalance - totalContrib;
+
+        // Get vehicle name
+        final vehicleName = _selectedUserVehicle?.vehicleName ?? '';
+
+        if (mounted) {
+          setState(() {
+            _selectedUserSubscription = UserVehicleSubscription(
+              vehicleId: vehicleId,
+              vehicleName: vehicleName,
+              subscriptionId: subscriptionResponse['id'] as int,
+              isSubscribed: true,
+              totalContributions: totalContrib,
+              currentBalance: currentBalance,
+              totalYield: totalYield,
+              hasYieldDistributions: hasYieldDistributions != null,
+            );
+            _isLoadingUserSubscription = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _selectedUserSubscription = null;
+            _isLoadingUserSubscription = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('[AdminScreen] Error loading subscription data: $e');
+      if (mounted) {
+        setState(() {
+          _selectedUserSubscription = null;
+          _isLoadingUserSubscription = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadUserTransactions(String userId, int? vehicleId) async {
     setState(() => _isLoadingTransactions = true);
     
     try {
       final supabase = Supabase.instance.client;
       List<TransactionHistoryItem> allTransactions = [];
       
-      // Fetch all user transactions (deposits and withdrawals) across all vehicles
-      final userTransactionsResponse = await supabase
+      // Fetch user transactions (deposits and withdrawals) for specific vehicle
+      var query = supabase
           .from('usertransactions')
           .select('id, transaction_id, amount, status, applied_at, created_at, vehicle_id')
           .eq('user_uid', userId);
+      
+      if (vehicleId != null) {
+        query = query.eq('vehicle_id', vehicleId);
+      }
+      
+      final userTransactionsResponse = await query;
       
       for (var trans in userTransactionsResponse) {
         final transactionTypeId = trans['transaction_id'] as int;
@@ -2252,11 +2849,17 @@ class _AdminScreenState extends State<AdminScreen> {
         ));
       }
       
-      // Fetch yield distributions across all vehicles
-      final yieldDistributions = await supabase
+      // Fetch yield distributions for specific vehicle
+      var yieldQuery = supabase
           .from('user_yield_distributions')
           .select('id, net_yield, gross_yield, balance_before, yield_id, vehicle_id, yields!inner(yield_type, yield_amount, applied_date, created_at)')
           .eq('user_uid', userId);
+      
+      if (vehicleId != null) {
+        yieldQuery = yieldQuery.eq('vehicle_id', vehicleId);
+      }
+      
+      final yieldDistributions = await yieldQuery;
       
       for (var yieldDist in yieldDistributions) {
         final netYield = (yieldDist['net_yield'] as num).toDouble();
@@ -2657,7 +3260,12 @@ class _AdminScreenState extends State<AdminScreen> {
       child: GestureDetector(
         onTap: () {
           setState(() {
-            _selectedUserType = type;
+            // If already selected, toggle it off (reset to all)
+            if (isSelected) {
+              _selectedUserType = UserTransactionType.all;
+            } else {
+              _selectedUserType = type;
+            }
           });
           _applyUserFilter();
         },
@@ -2731,9 +3339,13 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildManageUsersView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
+    return RefreshIndicator(
+      onRefresh: _refreshManageUsersView,
+      color: AppColors.primaryColor,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TitleText('Manage Users', fontSize: 24, color: AppColors.titleColor),
@@ -2775,6 +3387,22 @@ class _AdminScreenState extends State<AdminScreen> {
             )
           else if (_selectedUser != null) ...[
             const SizedBox(height: 24),
+            
+            // Apply Personal Yield button
+            StyledButton(
+              backgroundColor: Colors.orange,
+              onPressed: () => _showPersonalYieldDialog(_selectedUser!),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.percent_rounded, color: Colors.white, size: 16),
+                  const SizedBox(width: 6),
+                  PrimaryTextW('Apply Personal Yield', fontSize: 14),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             
             // Action buttons - smaller and side by side
             Row(
@@ -2829,6 +3457,73 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
             
             const SizedBox(height: 32),
+            
+            // Vehicle selector (only show if user is selected and has vehicles)
+            if (_selectedUser != null && 
+                _userVehicles.isNotEmpty && 
+                _selectedUserVehicle != null &&
+                _userVehicles.length > 0) ...[
+              const SecondaryText('Select Vehicle', fontSize: 14),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<InvestmentVehicle>(
+                value: () {
+                  if (_userVehicles.isEmpty) return null;
+                  if (_selectedUserVehicle == null) return _userVehicles.first;
+                  // Find the vehicle from the list by ID to ensure same object reference
+                  try {
+                    return _userVehicles.firstWhere((v) => v.id == _selectedUserVehicle!.id);
+                  } catch (e) {
+                    // If not found, return first vehicle
+                    return _userVehicles.first;
+                  }
+                }(),
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                ),
+                items: _userVehicles.map((vehicle) {
+                  return DropdownMenuItem<InvestmentVehicle>(
+                    value: vehicle,
+                    child: Text(vehicle.vehicleName),
+                  );
+                }).toList(),
+                onChanged: (vehicle) async {
+                  if (vehicle != null && _selectedUser != null) {
+                    // Ensure we use the vehicle from the list (same object reference)
+                    final vehicleFromList = _userVehicles.firstWhere(
+                      (v) => v.id == vehicle.id,
+                      orElse: () => vehicle,
+                    );
+                    setState(() {
+                      _selectedUserVehicle = vehicleFromList;
+                    });
+                    await _loadUserSubscriptionData(_selectedUser!.uid, vehicleFromList.id);
+                    await _loadUserTransactions(_selectedUser!.uid, vehicleFromList.id);
+                  }
+                },
+              ),
+              const SizedBox(height: 24),
+            ],
+            
+            // HomeCard - Account Summary
+            if (_selectedUserSubscription != null && !_isLoadingUserSubscription) ...[
+              HomeCard(
+                totalContributions: _selectedUserSubscription!.totalContributions,
+                yield: _selectedUserSubscription!.yieldPercentage,
+                currentBalance: _selectedUserSubscription!.currentBalance,
+                totalYield: _selectedUserSubscription!.totalYield,
+              ),
+              const SizedBox(height: 24),
+            ] else if (_isLoadingUserSubscription) ...[
+              const Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              const SizedBox(height: 24),
+            ],
             
             // Transaction History Section
             Row(
@@ -2969,6 +3664,60 @@ class _AdminScreenState extends State<AdminScreen> {
           ],
         ],
       ),
+    ),
     );
+  }
+
+  Future<void> _refreshManageUsersView() async {
+    // Reload users list
+    await _loadUsers();
+    
+    // If a user is selected, reload their data
+    if (_selectedUser != null) {
+      final userId = _selectedUser!.uid;
+      final previousVehicleId = _selectedUserVehicle?.id;
+      
+      // Reload vehicles for the user
+      try {
+        final vehicles = await YieldService.getUserVehicles(userId);
+        if (mounted && vehicles.isNotEmpty) {
+          InvestmentVehicle? vehicleToSelect;
+          
+          // Try to keep the same vehicle selected if it still exists
+          if (previousVehicleId != null) {
+            vehicleToSelect = vehicles.firstWhere(
+              (v) => v.id == previousVehicleId,
+              orElse: () => vehicles.first,
+            );
+          } else {
+            vehicleToSelect = vehicles.first;
+          }
+          
+          setState(() {
+            _userVehicles = vehicles;
+            _selectedUserVehicle = vehicleToSelect;
+          });
+          
+          // Reload subscription data and transactions for selected vehicle
+          await _loadUserSubscriptionData(userId, vehicleToSelect.id);
+          await _loadUserTransactions(userId, vehicleToSelect.id);
+        } else if (mounted) {
+          setState(() {
+            _userVehicles = [];
+            _selectedUserVehicle = null;
+            _selectedUserSubscription = null;
+          });
+        }
+      } catch (e) {
+        print('[AdminScreen] Error refreshing user vehicles: $e');
+        if (mounted) {
+          setState(() {
+            _userVehicles = [];
+            _selectedUserVehicle = null;
+            _selectedUserSubscription = null;
+          });
+        }
+      }
+    }
   }
 }
