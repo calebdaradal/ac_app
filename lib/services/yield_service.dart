@@ -99,12 +99,12 @@ class YieldService {
       // Calculate eligible balance: sum of deposits - sum of withdrawals (before yield date)
       double eligibleBalance = 0.0;
       
-      // Sum verified deposits (apply 2% fee like in createDeposit)
+      // Sum verified deposits
+      // Note: Amount stored in database is already after 2% management fee (see deposit_service.dart)
+      // So we use the amount directly without applying the fee again
       for (var deposit in deposits) {
         final amount = (deposit['amount'] as num).toDouble();
-        const feePercentage = 0.02;
-        final amountAfterFee = amount * (1 - feePercentage);
-        eligibleBalance += amountAfterFee;
+        eligibleBalance += amount;
       }
       
       // Subtract issued withdrawals
@@ -325,12 +325,12 @@ class YieldService {
     // Calculate eligible balance: sum of deposits - sum of withdrawals (before yield date)
     double eligibleBalance = 0.0;
     
-    // Sum verified deposits (apply 2% fee like in createDeposit)
+    // Sum verified deposits
+    // Note: Amount stored in database is already after 2% management fee (see deposit_service.dart)
+    // So we use the amount directly without applying the fee again
     for (var deposit in deposits) {
       final amount = (deposit['amount'] as num).toDouble();
-      const feePercentage = 0.02;
-      final amountAfterFee = amount * (1 - feePercentage);
-      eligibleBalance += amountAfterFee;
+      eligibleBalance += amount;
     }
     
     // Subtract issued withdrawals

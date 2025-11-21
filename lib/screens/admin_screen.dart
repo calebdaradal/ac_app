@@ -2764,25 +2764,45 @@ class _AdminScreenState extends State<AdminScreen> {
         // Load subscription data and transactions for first vehicle
         await _loadUserSubscriptionData(user.uid, firstVehicle.id);
         await _loadUserTransactions(user.uid, vehicleId: firstVehicle.id);
+        // Also load general stats in case subscription is null
+        await _loadUserStats(user.uid, vehicleId: firstVehicle.id);
       } else if (mounted) {
         setState(() {
           _userVehicles = [];
           _selectedUserVehicle = null;
+          _selectedUserSubscription = null;
         });
+        // Load general stats and transactions when no vehicles
+        await Future.wait([
+          _loadUserStats(user.uid),
+          _loadUserTransactions(user.uid),
+        ]);
       }
     } catch (e) {
       print('[AdminScreen] Error loading user vehicles: $e');
       if (mounted) {
+        setState(() {
+          _userVehicles = [];
+          _selectedUserVehicle = null;
+          _selectedUserSubscription = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading vehicles: $e')),
         );
+        // Try to load general stats even if vehicle loading failed
+        try {
+          await Future.wait([
+            _loadUserStats(user.uid),
+            _loadUserTransactions(user.uid),
+          ]);
+        } catch (statsError) {
+          print('[AdminScreen] Error loading user stats: $statsError');
+        }
       }
     }
     
     // Also load all vehicles for the filter dropdown
     await _loadVehicles();
-    // Load stats with optional vehicle filter
-    await _loadUserStats(user.uid, vehicleId: _selectedVehicle?.id);
   }
 
   Future<void> _loadUserSubscriptionData(String userId, int vehicleId) async {
@@ -3881,6 +3901,9 @@ class _AdminScreenState extends State<AdminScreen> {
     // Reload users list
     await _loadUsers();
     
+    // Reload all vehicles for the filter dropdown
+    await _loadVehicles();
+    
     // If a user is selected, reload their data
     if (_selectedUser != null) {
       final userId = _selectedUser!.uid;
@@ -3907,15 +3930,31 @@ class _AdminScreenState extends State<AdminScreen> {
             _selectedUserVehicle = vehicleToSelect;
           });
           
-          // Reload subscription data and transactions for selected vehicle
+          // Reload subscription data first to check if subscription exists
           await _loadUserSubscriptionData(userId, vehicleToSelect.id);
-          await _loadUserTransactions(userId, vehicleId: vehicleToSelect.id);
+          
+          // Load transactions and stats for the selected vehicle
+          await Future.wait([
+            _loadUserTransactions(userId, vehicleId: vehicleToSelect.id),
+            _loadUserStats(userId, vehicleId: vehicleToSelect.id),
+          ]);
+          
+          // Always load general stats (all vehicles) in case subscription is null
+          // This ensures HomeCard shows general stats when no vehicle-specific subscription exists
+          await _loadUserStats(userId);
         } else if (mounted) {
+          // No vehicles - clear vehicle-specific data and load general stats
           setState(() {
             _userVehicles = [];
             _selectedUserVehicle = null;
             _selectedUserSubscription = null;
           });
+          
+          // Load general user stats and transactions (all vehicles)
+          await Future.wait([
+            _loadUserStats(userId),
+            _loadUserTransactions(userId),
+          ]);
         }
       } catch (e) {
         print('[AdminScreen] Error refreshing user vehicles: $e');
@@ -3925,6 +3964,16 @@ class _AdminScreenState extends State<AdminScreen> {
             _selectedUserVehicle = null;
             _selectedUserSubscription = null;
           });
+          
+          // Try to load general stats even if vehicle loading failed
+          try {
+            await Future.wait([
+              _loadUserStats(userId),
+              _loadUserTransactions(userId),
+            ]);
+          } catch (statsError) {
+            print('[AdminScreen] Error loading user stats: $statsError');
+          }
         }
       }
     }
