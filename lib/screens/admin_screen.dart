@@ -149,6 +149,18 @@ class _AdminScreenState extends State<AdminScreen> {
     return DateFormat('MMM dd, yyyy • hh:mm a').format(date);
   }
 
+  /// Calculate the original deposit amount before 2% fee
+  /// Uses the same formula as contributions to reverse the 2% fee
+  double _getOriginalDepositAmount(double amountAfterFee) {
+    const feePercentage = 0.02;
+    // To perfectly reverse: divide by (1 - feePercentage)
+    // Example: 980 / 0.98 = 1000 (perfect reversal)
+    final originalAmount = amountAfterFee / (1 - feePercentage);
+    
+    // Round to 2 decimal places to ensure precision
+    return (originalAmount * 100).round() / 100.0;
+  }
+
   Future<DateTime?> _selectAppliedDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -387,7 +399,12 @@ class _AdminScreenState extends State<AdminScreen> {
                             ),
                             const SizedBox(height: 4),
                             TitleText(
-                              _formatCurrency(transaction.amount ?? 0),
+                              _formatCurrency(
+                                // For deposits, reverse the 2% fee to show original amount
+                                (!isWithdrawal && transaction.transactionId == TransactionType.deposit && transaction.amount != null)
+                                    ? _getOriginalDepositAmount(transaction.amount!)
+                                    : (transaction.amount ?? 0),
+                              ),
                               fontSize: 20,
                               color: isWithdrawal ? Colors.red.shade700 : AppColors.primaryColor,
                             ),

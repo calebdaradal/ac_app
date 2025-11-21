@@ -61,6 +61,18 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
     return formatter.format(amount);
   }
 
+  /// Calculate the original deposit amount before 2% fee
+  /// Uses the same formula as contributions to reverse the 2% fee
+  double _getOriginalDepositAmount(double amountAfterFee) {
+    const feePercentage = 0.02;
+    // To perfectly reverse: divide by (1 - feePercentage)
+    // Example: 980 / 0.98 = 1000 (perfect reversal)
+    final originalAmount = amountAfterFee / (1 - feePercentage);
+    
+    // Round to 2 decimal places to ensure precision
+    return (originalAmount * 100).round() / 100.0;
+  }
+
   Future<DateTime?> _selectAppliedDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -192,10 +204,14 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
         });
 
         final action = isDeposit ? 'Deposit' : 'Withdrawal';
+        // For deposits, show the original amount (before 2% fee)
+        final displayAmount = isDeposit && transaction.amount != null
+            ? _getOriginalDepositAmount(transaction.amount!)
+            : transaction.amount!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Transaction approved! $action of ${_formatCurrency(transaction.amount!)} processed successfully.',
+              'Transaction approved! $action of ${_formatCurrency(displayAmount)} processed successfully.',
             ),
             backgroundColor: Colors.green,
           ),
@@ -328,7 +344,12 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen> {
                                       ),
                                       const SizedBox(height: 8),
                                       TitleText(
-                                        _formatCurrency(transaction.amount ?? 0),
+                                        _formatCurrency(
+                                          // For deposits, reverse the 2% fee to show original amount
+                                          (transaction.transactionId == TransactionType.deposit && transaction.amount != null)
+                                              ? _getOriginalDepositAmount(transaction.amount!)
+                                              : (transaction.amount ?? 0),
+                                        ),
                                         fontSize: 24,
                                         color: transaction.transactionId == TransactionType.withdrawal
                                             ? Colors.red.shade700
