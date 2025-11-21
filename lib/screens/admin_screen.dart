@@ -3881,20 +3881,607 @@ class _AdminScreenState extends State<AdminScreen> {
               )
             else
               ..._filteredUserTransactions.map((transaction) {
-                return TransactionCard(
-                  date: TransactionHistoryService.formatDate(transaction.date),
-                  amount: transaction.amount,
-                  info: transaction.yieldPercent,
-                  status: transaction.status,
-                  type: transaction.type,
-                  isPositive: transaction.isPositive,
-                );
+                return _buildUserTransactionCard(transaction);
               }).toList(),
           ],
         ],
       ),
     ),
     );
+  }
+
+  Widget _buildUserTransactionCard(TransactionHistoryItem transaction) {
+    // Show delete button for Yield, Deposit, and Withdrawal transactions in user management
+    final canDelete = transaction.type == 'Yield' || 
+                      transaction.type == 'Deposit' || 
+                      transaction.type == 'Withdrawal';
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
+      color: const Color.fromRGBO(248, 248, 248, 1),
+      shadowColor: Colors.transparent,
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Row(
+          children: [
+            Expanded(
+              child: TransactionCard(
+                date: TransactionHistoryService.formatDate(transaction.date),
+                amount: transaction.amount,
+                info: transaction.yieldPercent,
+                status: transaction.status,
+                type: transaction.type,
+                isPositive: transaction.isPositive,
+              ),
+            ),
+            if (canDelete) ...[
+              const SizedBox(width: 12),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () {
+                  if (transaction.type == 'Yield') {
+                    _showDeleteYieldDialog(transaction);
+                  } else if (transaction.type == 'Deposit') {
+                    _showDeleteDepositDialog(transaction);
+                  } else if (transaction.type == 'Withdrawal') {
+                    _showDeleteWithdrawalDialog(transaction);
+                  }
+                },
+                tooltip: 'Delete ${transaction.type.toLowerCase()}',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDeleteYieldDialog(TransactionHistoryItem transaction) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+              const SizedBox(width: 12),
+              const TitleText('Delete Yield Update', fontSize: 20),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SecondaryText(
+                'Are you sure you want to delete this yield update?',
+                fontSize: 14,
+              ),
+              const SizedBox(height: 12),
+              SecondaryText(
+                'Amount: ${transaction.isPositive ? '+' : ''}₱${transaction.amount.toStringAsFixed(2)}',
+                fontSize: 14,
+                color: AppColors.titleColor,
+              ),
+              if (transaction.yieldPercent != null) ...[
+                const SizedBox(height: 4),
+                SecondaryText(
+                  'Yield: ${transaction.yieldPercent! >= 0 ? '+' : ''}${transaction.yieldPercent!.toStringAsFixed(2)}%',
+                  fontSize: 14,
+                  color: AppColors.titleColor,
+                ),
+              ],
+              const SizedBox(height: 12),
+              const SecondaryText(
+                'This will revert the balance change as if the yield never existed.',
+                fontSize: 12,
+                color: Colors.red,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteYieldDistribution(transaction);
+    }
+  }
+
+  Future<void> _deleteYieldDistribution(TransactionHistoryItem transaction) async {
+    if (_selectedUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No user selected')),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingTransactions = true);
+
+    try {
+      final supabase = Supabase.instance.client;
+      final userId = _selectedUser!.uid;
+
+      // Get the yield distribution record to get net_yield and vehicle_id
+      final yieldDistResponse = await supabase
+          .from('user_yield_distributions')
+          .select('id, net_yield, vehicle_id, balance_before, balance_after')
+          .eq('id', transaction.id)
+          .eq('user_uid', userId)
+          .maybeSingle();
+
+      if (yieldDistResponse == null) {
+        throw Exception('Yield distribution not found');
+      }
+
+      final netYield = (yieldDistResponse['net_yield'] as num).toDouble();
+      final vehicleId = yieldDistResponse['vehicle_id'] as int;
+
+      // Get current subscription to revert balance
+      final subscriptionResponse = await supabase
+          .from('userinvestmentvehicle')
+          .select('id, current_balance')
+          .eq('user_uid', userId)
+          .eq('vehicle_id', vehicleId)
+          .maybeSingle();
+
+      if (subscriptionResponse == null) {
+        throw Exception('User subscription not found');
+      }
+
+      final currentBalance = (subscriptionResponse['current_balance'] as num).toDouble();
+      
+      // Revert the balance: subtract the net_yield that was added
+      final revertedBalance = currentBalance - netYield;
+      final revertedBalanceRounded = (revertedBalance * 100).round() / 100.0;
+
+      // Update the balance in userinvestmentvehicle
+      await supabase
+          .from('userinvestmentvehicle')
+          .update({
+            'current_balance': revertedBalanceRounded,
+          })
+          .eq('id', subscriptionResponse['id'] as int);
+
+      // Delete the yield distribution record
+      await supabase
+          .from('user_yield_distributions')
+          .delete()
+          .eq('id', transaction.id);
+
+      print('[AdminScreen] Deleted yield distribution ${transaction.id}, reverted balance from ${currentBalance.toStringAsFixed(2)} to ${revertedBalanceRounded.toStringAsFixed(2)}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Yield update deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Reload data to reflect changes
+        if (_selectedUserVehicle != null) {
+          await Future.wait([
+            _loadUserSubscriptionData(userId, _selectedUserVehicle!.id),
+            _loadUserTransactions(userId, vehicleId: _selectedUserVehicle!.id),
+            _loadUserStats(userId, vehicleId: _selectedUserVehicle!.id),
+          ]);
+        } else {
+          await Future.wait([
+            _loadUserStats(userId),
+            _loadUserTransactions(userId),
+          ]);
+        }
+      }
+    } catch (e) {
+      print('[AdminScreen] Error deleting yield distribution: $e');
+      if (mounted) {
+        setState(() => _isLoadingTransactions = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting yield update: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showDeleteDepositDialog(TransactionHistoryItem transaction) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+              const SizedBox(width: 12),
+              const TitleText('Delete Deposit', fontSize: 20),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SecondaryText(
+                'Are you sure you want to delete this deposit?',
+                fontSize: 14,
+              ),
+              const SizedBox(height: 12),
+              SecondaryText(
+                'Amount: +₱${transaction.amount.toStringAsFixed(2)}',
+                fontSize: 14,
+                color: AppColors.titleColor,
+              ),
+              const SizedBox(height: 12),
+              const SecondaryText(
+                'This will revert the balance and contribution changes as if the deposit never existed.',
+                fontSize: 12,
+                color: Colors.red,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteDeposit(transaction);
+    }
+  }
+
+  Future<void> _showDeleteWithdrawalDialog(TransactionHistoryItem transaction) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+              const SizedBox(width: 12),
+              const TitleText('Delete Withdrawal', fontSize: 20),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SecondaryText(
+                'Are you sure you want to delete this withdrawal?',
+                fontSize: 14,
+              ),
+              const SizedBox(height: 12),
+              SecondaryText(
+                'Amount: -₱${transaction.amount.toStringAsFixed(2)}',
+                fontSize: 14,
+                color: AppColors.titleColor,
+              ),
+              const SizedBox(height: 12),
+              const SecondaryText(
+                'This will revert the balance change as if the withdrawal never existed.',
+                fontSize: 12,
+                color: Colors.red,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteWithdrawal(transaction);
+    }
+  }
+
+  Future<void> _deleteDeposit(TransactionHistoryItem transaction) async {
+    if (_selectedUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No user selected')),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingTransactions = true);
+
+    try {
+      final supabase = Supabase.instance.client;
+      final userId = _selectedUser!.uid;
+
+      // Get the transaction record to get vehicle_id and amount
+      final transactionResponse = await supabase
+          .from('usertransactions')
+          .select('id, amount, vehicle_id, status')
+          .eq('id', transaction.id)
+          .eq('user_uid', userId)
+          .eq('transaction_id', TransactionType.deposit)
+          .maybeSingle();
+
+      if (transactionResponse == null) {
+        throw Exception('Deposit transaction not found');
+      }
+
+      // Only allow deletion of verified deposits
+      final status = transactionResponse['status'] as String;
+      if (status != 'VERIFIED') {
+        throw Exception('Only verified deposits can be deleted');
+      }
+
+      final amountAfterFee = (transactionResponse['amount'] as num).toDouble();
+      final vehicleId = transactionResponse['vehicle_id'] as int?;
+
+      if (vehicleId == null) {
+        throw Exception('Vehicle ID not found for deposit');
+      }
+
+      // Reverse the 2% fee to get original amount: original = amount / 0.98
+      const feePercentage = 0.02;
+      final originalAmount = amountAfterFee / (1 - feePercentage);
+      final originalAmountRounded = (originalAmount * 100).round() / 100.0;
+
+      // Get current subscription
+      final subscriptionResponse = await supabase
+          .from('userinvestmentvehicle')
+          .select('id, current_balance, total_contrib')
+          .eq('user_uid', userId)
+          .eq('vehicle_id', vehicleId)
+          .maybeSingle();
+
+      if (subscriptionResponse == null) {
+        throw Exception('User subscription not found');
+      }
+
+      final currentBalance = (subscriptionResponse['current_balance'] as num).toDouble();
+      final totalContrib = (subscriptionResponse['total_contrib'] as num).toDouble();
+
+      // Revert the changes:
+      // - Subtract amount after fee from current_balance
+      // - Subtract original amount from total_contrib
+      final revertedBalance = currentBalance - amountAfterFee;
+      final revertedTotalContrib = totalContrib - originalAmountRounded;
+      
+      final revertedBalanceRounded = (revertedBalance * 100).round() / 100.0;
+      final revertedTotalContribRounded = (revertedTotalContrib * 100).round() / 100.0;
+
+      // Ensure values don't go negative
+      if (revertedBalanceRounded < 0 || revertedTotalContribRounded < 0) {
+        throw Exception('Cannot delete deposit: would result in negative balance');
+      }
+
+      // Update the balance and total_contrib
+      await supabase
+          .from('userinvestmentvehicle')
+          .update({
+            'current_balance': revertedBalanceRounded,
+            'total_contrib': revertedTotalContribRounded,
+          })
+          .eq('id', subscriptionResponse['id'] as int);
+
+      // Delete the transaction record from usertransactions
+      final deleteResponse = await supabase
+          .from('usertransactions')
+          .delete()
+          .eq('id', transaction.id)
+          .eq('user_uid', userId)
+          .select();
+
+      if (deleteResponse.isEmpty) {
+        throw Exception('Failed to delete deposit transaction from usertransactions table');
+      }
+
+      print('[AdminScreen] Deleted deposit ${transaction.id} from usertransactions, reverted balance from ${currentBalance.toStringAsFixed(2)} to ${revertedBalanceRounded.toStringAsFixed(2)}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Deposit deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Reload data to reflect changes
+        if (_selectedUserVehicle != null && _selectedUserVehicle!.id == vehicleId) {
+          await Future.wait([
+            _loadUserSubscriptionData(userId, vehicleId),
+            _loadUserTransactions(userId, vehicleId: vehicleId),
+            _loadUserStats(userId, vehicleId: vehicleId),
+          ]);
+        } else {
+          await Future.wait([
+            _loadUserStats(userId),
+            _loadUserTransactions(userId),
+          ]);
+        }
+      }
+    } catch (e) {
+      print('[AdminScreen] Error deleting deposit: $e');
+      if (mounted) {
+        setState(() => _isLoadingTransactions = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting deposit: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteWithdrawal(TransactionHistoryItem transaction) async {
+    if (_selectedUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No user selected')),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingTransactions = true);
+
+    try {
+      final supabase = Supabase.instance.client;
+      final userId = _selectedUser!.uid;
+
+      // Get the transaction record to get vehicle_id, amount, and applied_at
+      final transactionResponse = await supabase
+          .from('usertransactions')
+          .select('id, amount, vehicle_id, applied_at, status')
+          .eq('id', transaction.id)
+          .eq('user_uid', userId)
+          .eq('transaction_id', TransactionType.withdrawal)
+          .maybeSingle();
+
+      if (transactionResponse == null) {
+        throw Exception('Withdrawal transaction not found');
+      }
+
+      // Only allow deletion of issued withdrawals
+      final status = transactionResponse['status'] as String;
+      if (status != 'ISSUED') {
+        throw Exception('Only issued withdrawals can be deleted');
+      }
+
+      final withdrawalAmount = (transactionResponse['amount'] as num).toDouble();
+      final vehicleId = transactionResponse['vehicle_id'] as int?;
+      final appliedAtStr = transactionResponse['applied_at'] as String;
+      final appliedDate = DateTime.parse(appliedAtStr);
+
+      if (vehicleId == null) {
+        throw Exception('Vehicle ID not found for withdrawal');
+      }
+
+      // Get current subscription to get current balance
+      final subscriptionResponse = await supabase
+          .from('userinvestmentvehicle')
+          .select('id, current_balance')
+          .eq('user_uid', userId)
+          .eq('vehicle_id', vehicleId)
+          .maybeSingle();
+
+      if (subscriptionResponse == null) {
+        throw Exception('User subscription not found');
+      }
+
+      final currentBalance = (subscriptionResponse['current_balance'] as num).toDouble();
+
+      // Recalculate the fees that were applied when the withdrawal was issued
+      // We need to know what the balance was at that time, but we can approximate
+      // by using current balance + withdrawal amount as the balance before withdrawal
+      final balanceBeforeWithdrawal = currentBalance + withdrawalAmount;
+      
+      // Calculate fees using the same logic as withdrawal service
+      final isRedemptionDate = RedemptionDates.isRedemptionDate(appliedDate);
+      final threshold = balanceBeforeWithdrawal * 0.3333;
+      
+      double feeAmount = 0.0;
+      if (!isRedemptionDate) {
+        feeAmount += withdrawalAmount * 0.05;
+      }
+      if (withdrawalAmount >= threshold) {
+        feeAmount += withdrawalAmount * 0.05;
+      }
+      final feeAmountRounded = (feeAmount * 100).round() / 100.0;
+      
+      // Total deduction that was applied = withdrawal + fees
+      final totalDeduction = withdrawalAmount + feeAmountRounded;
+      final totalDeductionRounded = (totalDeduction * 100).round() / 100.0;
+
+      // Revert: add back the total deduction to current balance
+      final revertedBalance = currentBalance + totalDeductionRounded;
+      final revertedBalanceRounded = (revertedBalance * 100).round() / 100.0;
+
+      // Update the balance
+      await supabase
+          .from('userinvestmentvehicle')
+          .update({
+            'current_balance': revertedBalanceRounded,
+          })
+          .eq('id', subscriptionResponse['id'] as int);
+
+      // Delete the transaction record from usertransactions
+      final deleteResponse = await supabase
+          .from('usertransactions')
+          .delete()
+          .eq('id', transaction.id)
+          .eq('user_uid', userId)
+          .select();
+
+      if (deleteResponse.isEmpty) {
+        throw Exception('Failed to delete withdrawal transaction from usertransactions table');
+      }
+
+      print('[AdminScreen] Deleted withdrawal ${transaction.id} from usertransactions, reverted balance from ${currentBalance.toStringAsFixed(2)} to ${revertedBalanceRounded.toStringAsFixed(2)}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Withdrawal deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Reload data to reflect changes
+        if (_selectedUserVehicle != null && _selectedUserVehicle!.id == vehicleId) {
+          await Future.wait([
+            _loadUserSubscriptionData(userId, vehicleId),
+            _loadUserTransactions(userId, vehicleId: vehicleId),
+            _loadUserStats(userId, vehicleId: vehicleId),
+          ]);
+        } else {
+          await Future.wait([
+            _loadUserStats(userId),
+            _loadUserTransactions(userId),
+          ]);
+        }
+      }
+    } catch (e) {
+      print('[AdminScreen] Error deleting withdrawal: $e');
+      if (mounted) {
+        setState(() => _isLoadingTransactions = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting withdrawal: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _refreshManageUsersView() async {
