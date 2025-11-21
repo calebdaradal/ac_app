@@ -3336,17 +3336,25 @@ class _AdminScreenState extends State<AdminScreen> {
         );
       },
     );
-
-    // Dispose controllers after dialog closes
-    Future.delayed(const Duration(milliseconds: 300), () {
-      try {
-        firstNameController.dispose();
-        lastNameController.dispose();
-        emailController.dispose();
-      } catch (e) {
-        print('[EditProfileDialog] Controller disposal: $e');
-      }
-    });
+    
+    // Dispose controllers after dialog is fully closed
+    // Wait for any pending state updates to complete before disposing
+    await Future.delayed(const Duration(milliseconds: 100));
+    try {
+      firstNameController.dispose();
+    } catch (e) {
+      // Controller already disposed or error, ignore
+    }
+    try {
+      lastNameController.dispose();
+    } catch (e) {
+      // Controller already disposed or error, ignore
+    }
+    try {
+      emailController.dispose();
+    } catch (e) {
+      // Controller already disposed or error, ignore
+    }
   }
 
 
@@ -3362,14 +3370,41 @@ class _AdminScreenState extends State<AdminScreen> {
 
     try {
       final supabase = Supabase.instance.client;
-      await supabase
-          .from('profiles')
-          .update({
+      
+      // Check if email changed - if so, use Edge Function to update auth email (bypasses verification)
+      final emailChanged = email.trim().toLowerCase() != user.email.toLowerCase();
+      
+      if (emailChanged) {
+        // Use Edge Function to update email in both auth and profiles (bypasses email verification)
+        final response = await supabase.functions.invoke(
+          'update-user-email',
+          body: {
+            'user_id': user.uid,
+            'email': email.trim().toLowerCase(),
             'first_name': firstName.trim(),
             'last_name': lastName.trim(),
-            'email': email.trim(),
-          })
-          .eq('id', user.uid);
+          },
+        );
+
+        // Check for errors in response
+        if (response.data != null && response.data['error'] != null) {
+          throw Exception(response.data['error']);
+        }
+        
+        // Verify success
+        if (response.data == null || response.data['ok'] != true) {
+          throw Exception('Email update did not complete successfully');
+        }
+      } else {
+        // Email didn't change, just update profile fields
+        await supabase
+            .from('profiles')
+            .update({
+              'first_name': firstName.trim(),
+              'last_name': lastName.trim(),
+            })
+            .eq('id', user.uid);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3386,7 +3421,7 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error updating user: $e'),
+            content: Text('Error updating user: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -3563,19 +3598,29 @@ class _AdminScreenState extends State<AdminScreen> {
           else if (_selectedUser != null) ...[
             const SizedBox(height: 24),
             
-            // Apply Personal Yield button
-            StyledButton(
-              backgroundColor: Colors.orange,
-              onPressed: () => _showPersonalYieldDialog(_selectedUser!),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.percent_rounded, color: Colors.white, size: 16),
-                  const SizedBox(width: 6),
-                  PrimaryTextW('Apply Personal Yield', fontSize: 14),
-                ],
-              ),
+            // Apply Personal Yield button - aligned with Edit button width
+            Row(
+              children: [
+                Expanded(
+                  child: StyledButton(
+                    backgroundColor: Colors.orange,
+                    onPressed: () => _showPersonalYieldDialog(_selectedUser!),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.percent_rounded, color: Colors.white, size: 16),
+                        const SizedBox(width: 6),
+                        PrimaryTextW('Apply Personal Yield', fontSize: 14),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(), // Spacer to match Edit button width
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             
