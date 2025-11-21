@@ -103,22 +103,32 @@ class WithdrawalService {
     // Check if applied date is a redemption date
     final isRedemptionDate = RedemptionDates.isRedemptionDate(appliedDate);
     
-    // Calculate 33.33% threshold
-    final threshold = currentBalance * 0.3333;
+    // Calculate 33.33% threshold (using 1/3 for precision)
+    final threshold = currentBalance / 3.0;
     
-    // TWO PENALTIES:
-    // Penalty 1: 5% fee on non-redemption dates (always applies)
-    // Penalty 2: Additional 5% penalty when withdrawing >= 33.33% of balance
+    // TWO PENALTIES (applied sequentially):
+    // 1. Redemption penalty (5%): Applies on NON-redemption dates
+    // 2. Gate penalty (5%): Applies when withdrawal >= 33.33% of balance (checked after redemption penalty)
     double feeAmount = 0.0;
+    double withdrawalAfterRedemption = withdrawalAmountRounded;
     
-    // Penalty 1: 5% fee on non-redemption dates
+    // STEP 1: Apply redemption penalty (5% on NON-redemption dates)
     if (!isRedemptionDate) {
-      feeAmount += withdrawalAmountRounded * 0.05;
+      final redemptionPenalty = withdrawalAmountRounded * 0.05;
+      feeAmount += redemptionPenalty;
+      withdrawalAfterRedemption = withdrawalAmountRounded; // Withdrawal amount stays the same, fee is separate
+      print('[WithdrawalService] Applied redemption penalty (5%): $redemptionPenalty');
     }
     
-    // Penalty 2: Additional 5% penalty when withdrawing >= 33.33% of balance
-    if (withdrawalAmountRounded >= threshold) {
-      feeAmount += withdrawalAmountRounded * 0.05;
+    // STEP 2: Check if withdrawal amount >= 33.33% of balance
+    // If yes, apply gate penalty (5%) to the withdrawal amount
+    if (withdrawalAfterRedemption >= threshold) {
+      final gatePenalty = withdrawalAfterRedemption * 0.05;
+      feeAmount += gatePenalty;
+      print('[WithdrawalService] Applied gate penalty (5% of $withdrawalAfterRedemption): $gatePenalty');
+      print('[WithdrawalService] Withdrawal: $withdrawalAfterRedemption, Threshold: $threshold, Percentage: ${(withdrawalAfterRedemption / currentBalance * 100).toStringAsFixed(2)}%');
+    } else {
+      print('[WithdrawalService] No gate penalty - Withdrawal: $withdrawalAfterRedemption, Threshold: $threshold, Percentage: ${(withdrawalAfterRedemption / currentBalance * 100).toStringAsFixed(2)}%');
     }
     
     // Round fee to 2 decimal places

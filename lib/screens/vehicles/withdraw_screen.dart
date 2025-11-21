@@ -2,6 +2,7 @@ import 'package:ac_app/services/bank_details_service.dart';
 import 'package:ac_app/services/transaction_service.dart';
 import 'package:ac_app/services/user_profile_service.dart';
 import 'package:ac_app/constants/transaction_constants.dart';
+import 'package:ac_app/utils/redemption_dates.dart';
 import 'package:ac_app/shared/styled_button.dart';
 import 'package:ac_app/shared/styled_card.dart';
 import 'package:ac_app/shared/styled_text.dart';
@@ -28,7 +29,10 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
   BankDetails? _bankDetails;
   double? _currentBalance;
   double _feeAmount = 0.0;
-  double _totalAmount = 0.0;
+  double _totalAmount = 0.0; // Total deduction from balance (withdrawal + fees)
+  double _totalWithdraw = 0.0; // What user actually receives (withdrawal - fees)
+  double _redemptionPenalty = 0.0;
+  double _gatePenalty = 0.0;
 
   @override
   void initState() {
@@ -100,20 +104,43 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
       setState(() {
         _feeAmount = 0.0;
         _totalAmount = 0.0;
+        _totalWithdraw = 0.0;
+        _redemptionPenalty = 0.0;
+        _gatePenalty = 0.0;
       });
       return;
     }
 
-    // Use shared fee calculation logic (use current date for fee calculation)
-    final feeCalc = TransactionService.calculateWithdrawalFee(
-      withdrawalAmount: amount,
-      currentBalance: _currentBalance!,
-      appliedDate: DateTime.now(),
-    );
+    // Calculate penalties separately for display
+    final isRedemptionDate = RedemptionDates.isRedemptionDate(DateTime.now());
+    final threshold = _currentBalance! / 3.0;
+    
+    double redemptionPenalty = 0.0;
+    double gatePenalty = 0.0;
+    
+    // STEP 1: Apply redemption penalty (5% on NON-redemption dates)
+    if (!isRedemptionDate) {
+      redemptionPenalty = amount * 0.05;
+    }
+    
+    // STEP 2: Check if withdrawal amount >= 33.33% of balance
+    // If yes, apply gate penalty (5%) to the withdrawal amount
+    if (amount >= threshold) {
+      gatePenalty = amount * 0.05;
+    }
+    
+    final totalFee = redemptionPenalty + gatePenalty;
+    // Total deduction from balance = withdrawal amount + fees
+    final totalDeduction = amount + totalFee;
+    // Total withdraw (what user receives) = withdrawal amount - fees
+    final totalWithdraw = amount - totalFee;
 
     setState(() {
-      _feeAmount = feeCalc['fee']!;
-      _totalAmount = feeCalc['totalDeduction']!;
+      _feeAmount = totalFee;
+      _totalAmount = totalDeduction; // This is what gets deducted from balance
+      _totalWithdraw = totalWithdraw; // This is what user actually receives
+      _redemptionPenalty = redemptionPenalty;
+      _gatePenalty = gatePenalty;
     });
   }
 
@@ -276,9 +303,9 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                             const SizedBox(height: 4.0),
                           ],
                           SecondaryText(
-                            'Withdrawals incur a 5% fee on non-redemption dates. Additional 5% penalty applies when withdrawing 33.33% or more of balance.',
-                            fontSize: 14,
-                            color: Colors.grey,
+                            'Fee Information:\n• 5% fee applies on all withdrawals (waived on redemption dates)\n• Additional 5% penalty when withdrawing 33.33% or more of your balance',
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
                           ),
                           const SizedBox(height: 24.0),
                           Padding(
@@ -291,64 +318,111 @@ class _WithdrawFundsState extends State<WithdrawFunds> {
                           ),
                           const SizedBox(height: 16.0),
                           // Fee and total information
-                          if (_feeAmount > 0 && _currentBalance != null) ...[
+                          if (_currentBalance != null && _totalAmount > 0) ...[
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 24.0),
                               child: Container(
                                 padding: const EdgeInsets.all(16.0),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.shade50,
+                                  color: _feeAmount > 0 ? Colors.orange.shade50 : Colors.green.shade50,
                                   borderRadius: BorderRadius.circular(8.0),
                                   border: Border.all(
-                                    color: Colors.orange.shade200,
+                                    color: _feeAmount > 0 ? Colors.orange.shade200 : Colors.green.shade200,
                                     width: 1,
                                   ),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        SecondaryText(
-                                          'Withdrawal Amount:',
-                                          fontSize: 14,
-                                          color: Colors.black87,
+                                    // Penalties breakdown
+                                    if (_feeAmount > 0) ...[
+                                      if (_redemptionPenalty > 0) ...[
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            SecondaryText(
+                                              'Redemption Penalty (5%):',
+                                              fontSize: 14,
+                                              color: Colors.orange.shade700,
+                                            ),
+                                            SecondaryText(
+                                              '₱${_redemptionPenalty.toStringAsFixed(2)}',
+                                              fontSize: 14,
+                                              color: Colors.orange.shade700,
+                                            ),
+                                          ],
                                         ),
-                                        SecondaryText(
-                                          '₱${(_totalAmount - _feeAmount).toStringAsFixed(2)}',
-                                          fontSize: 14,
-                                          color: Colors.black87,
-                                        ),
+                                        const SizedBox(height: 6.0),
                                       ],
-                                    ),
-                                    const SizedBox(height: 4.0),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        SecondaryText(
-                                          'Fee (5%):',
-                                          fontSize: 14,
-                                          color: Colors.orange.shade700,
+                                      if (_gatePenalty > 0) ...[
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            TitleText(
+                                              'Gate Penalty (5%):',
+                                              fontSize: 14,
+                                              color: Colors.red.shade700,
+                                            ),
+                                            TitleText(
+                                              '₱${_gatePenalty.toStringAsFixed(2)}',
+                                              fontSize: 14,
+                                              color: Colors.red.shade700,
+                                            ),
+                                          ],
                                         ),
-                                        SecondaryText(
-                                          '₱${_feeAmount.toStringAsFixed(2)}',
-                                          fontSize: 14,
-                                          color: Colors.orange.shade700,
-                                        ),
+                                        const SizedBox(height: 6.0),
                                       ],
-                                    ),
-                                    const Divider(height: 16.0),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          TitleText(
+                                            'Total Penalties:',
+                                            fontSize: 14,
+                                            color: Colors.orange.shade700,
+                                          ),
+                                          TitleText(
+                                            '₱${_feeAmount.toStringAsFixed(2)}',
+                                            fontSize: 14,
+                                            color: Colors.orange.shade700,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12.0),
+                                      const Divider(height: 1.0),
+                                      const SizedBox(height: 12.0),
+                                    ],
+                                    // Total Withdraw (withdrawal amount - penalties = what you actually receive)
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         TitleText(
-                                          'Total Deduction:',
-                                          fontSize: 16,
+                                          'Total Withdraw:',
+                                          fontSize: 18,
+                                          color: AppColors.primaryColor,
                                         ),
                                         TitleText(
-                                          '₱${_totalAmount.toStringAsFixed(2)}',
+                                          '₱${_totalWithdraw.toStringAsFixed(2)}',
+                                          fontSize: 18,
+                                          color: AppColors.primaryColor,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12.0),
+                                    const Divider(height: 1.0),
+                                    const SizedBox(height: 12.0),
+                                    // Balance After
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        SecondaryText(
+                                          'Balance After:',
+                                          fontSize: 14,
+                                          color: Colors.black87,
+                                        ),
+                                        TitleText(
+                                          '₱${(_currentBalance! - _totalAmount).toStringAsFixed(2)}',
                                           fontSize: 16,
+                                          color: AppColors.primaryColor,
                                         ),
                                       ],
                                     ),

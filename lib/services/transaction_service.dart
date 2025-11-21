@@ -9,14 +9,20 @@ class TransactionService {
   /// Calculate withdrawal fee based on amount, current balance, and applied date
   /// Returns a map with 'fee' and 'totalDeduction'
   /// 
-  /// Fee logic (TWO penalties):
-  /// 1. 5% fee: ALWAYS applies on non-redemption dates (regardless of amount)
-  /// 2. 33.33% penalty: Additional 5% fee when withdrawing >= 33.33% of current balance
+  /// Fee logic (TWO penalties applied sequentially):
+  /// 1. Redemption penalty (5%): Applies when withdrawing on NON-redemption dates
+  /// 2. Gate penalty (5%): Applies when withdrawal amount >= 33.33% of current balance
+  /// 
+  /// Process:
+  /// - First apply redemption penalty (if non-redemption date)
+  /// - Then check if original withdrawal amount >= 33.33% of balance
+  /// - If yes, apply gate penalty
   /// 
   /// Examples:
-  /// - Withdraw 10% on non-redemption date: 5% fee only
-  /// - Withdraw 40% on non-redemption date: 5% fee + 5% penalty = 10% total
-  /// - Withdraw 40% on redemption date: 5% penalty only (no 5% base fee)
+  /// - Withdraw 10% on non-redemption date: 5% redemption penalty only
+  /// - Withdraw 40% on non-redemption date: 5% redemption + 5% gate = 10% total
+  /// - Withdraw 40% on redemption date: 5% gate penalty only
+  /// - Withdraw 10% on redemption date: No penalties
   static Map<String, double> calculateWithdrawalFee({
     required double withdrawalAmount,
     required double currentBalance,
@@ -28,21 +34,49 @@ class TransactionService {
     // Check if it's a redemption date
     final isRedemptionDate = RedemptionDates.isRedemptionDate(date);
     
-    // Calculate 33.33% threshold
-    final threshold = currentBalance * 0.3333;
+    // Calculate 33.33% threshold (using 1/3 for precision)
+    final threshold = currentBalance / 3.0;
+    
+    print('[TransactionService] === FEE CALCULATION START ===');
+    print('[TransactionService] Original Withdrawal Amount: $withdrawalAmount');
+    print('[TransactionService] Current Balance: $currentBalance');
+    print('[TransactionService] Threshold (33.33%): $threshold');
+    print('[TransactionService] Is Redemption Date: $isRedemptionDate');
     
     double fee = 0.0;
+    double withdrawalAfterRedemption = withdrawalAmount;
     
-    // Penalty 1: 5% fee on non-redemption dates (always applies)
+    // STEP 1: Apply redemption penalty (5% on NON-redemption dates)
+    // This penalty is added to the fee, but we check the NEW withdrawal amount for gate penalty
     if (!isRedemptionDate) {
-      fee += withdrawalAmount * 0.05;
+      final redemptionPenalty = withdrawalAmount * 0.05;
+      fee += redemptionPenalty;
+      withdrawalAfterRedemption = withdrawalAmount; // Withdrawal amount stays the same, fee is separate
+      print('[TransactionService] ✓ Applied redemption penalty (5%): $redemptionPenalty');
+      print('[TransactionService] Withdrawal after redemption penalty: $withdrawalAfterRedemption');
+    } else {
+      print('[TransactionService] ✗ Skipped redemption penalty (redemption date)');
     }
     
-    // Penalty 2: Additional 5% penalty when withdrawing >= 33.33% of balance
-    if (withdrawalAmount >= threshold) {
-      fee += withdrawalAmount * 0.05;
+    // STEP 2: Check if withdrawal amount (after redemption penalty consideration) >= 33.33% of balance
+    // If yes, apply gate penalty (5%) to the withdrawal amount
+    final meetsGateThreshold = withdrawalAfterRedemption >= threshold;
+    print('[TransactionService] Gate threshold check: $withdrawalAfterRedemption >= $threshold = $meetsGateThreshold');
+    
+    if (meetsGateThreshold) {
+      // Apply gate penalty to the withdrawal amount
+      final gatePenalty = withdrawalAfterRedemption * 0.05;
+      fee += gatePenalty;
+      print('[TransactionService] ✓✓✓ APPLIED GATE PENALTY (5% of $withdrawalAfterRedemption): $gatePenalty ✓✓✓');
+    } else {
+      print('[TransactionService] ✗✗✗ SKIPPED GATE PENALTY (withdrawal < 33.33%) ✗✗✗');
     }
 
+    print('[TransactionService] === FEE CALCULATION END ===');
+    print('[TransactionService] Total fee: $fee');
+    print('[TransactionService] Total deduction: ${withdrawalAmount + fee}');
+    print('[TransactionService] Breakdown: Withdrawal ($withdrawalAmount) + Fee ($fee) = Total (${withdrawalAmount + fee})');
+    
     return {
       'fee': fee,
       'totalDeduction': withdrawalAmount + fee,

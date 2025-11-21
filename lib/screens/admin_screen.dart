@@ -119,19 +119,20 @@ class _AdminScreenState extends State<AdminScreen> {
       return 'No fee';
     }
     
-    final threshold = currentBalance * 0.3333;
+    final threshold = currentBalance / 3.0; // 33.33%
     final isRedemptionDate = RedemptionDates.isRedemptionDate(appliedDate);
     final exceedsThreshold = withdrawalAmount >= threshold;
+    final percentage = (withdrawalAmount / currentBalance * 100);
     
     if (feeAmount == 0) {
       return 'No fee (redemption date and withdrawal < 33.33%)';
     } else if (isRedemptionDate && exceedsThreshold) {
-      return '5% penalty applies (withdrawal >= 33.33% of balance)';
+      return '5% penalty applies (${percentage.toStringAsFixed(1)}% of balance ≥ 33.33%)';
     } else if (!isRedemptionDate && !exceedsThreshold) {
       return '5% fee applies (not a redemption date)';
     } else {
       // Both penalties apply: non-redemption date AND >= 33.33%
-      return '10% total fee (5% non-redemption + 5% for >= 33.33%)';
+      return '10% total fee (5% non-redemption + 5% for ${percentage.toStringAsFixed(1)}% ≥ 33.33%)';
     }
   }
 
