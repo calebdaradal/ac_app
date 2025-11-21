@@ -3336,17 +3336,25 @@ class _AdminScreenState extends State<AdminScreen> {
         );
       },
     );
-
-    // Dispose controllers after dialog closes
-    Future.delayed(const Duration(milliseconds: 300), () {
-      try {
-        firstNameController.dispose();
-        lastNameController.dispose();
-        emailController.dispose();
-      } catch (e) {
-        print('[EditProfileDialog] Controller disposal: $e');
-      }
-    });
+    
+    // Dispose controllers after dialog is fully closed
+    // Wait for any pending state updates to complete before disposing
+    await Future.delayed(const Duration(milliseconds: 100));
+    try {
+      firstNameController.dispose();
+    } catch (e) {
+      // Controller already disposed or error, ignore
+    }
+    try {
+      lastNameController.dispose();
+    } catch (e) {
+      // Controller already disposed or error, ignore
+    }
+    try {
+      emailController.dispose();
+    } catch (e) {
+      // Controller already disposed or error, ignore
+    }
   }
 
 
@@ -3590,19 +3598,29 @@ class _AdminScreenState extends State<AdminScreen> {
           else if (_selectedUser != null) ...[
             const SizedBox(height: 24),
             
-            // Apply Personal Yield button
-            StyledButton(
-              backgroundColor: Colors.orange,
-              onPressed: () => _showPersonalYieldDialog(_selectedUser!),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.percent_rounded, color: Colors.white, size: 16),
-                  const SizedBox(width: 6),
-                  PrimaryTextW('Apply Personal Yield', fontSize: 14),
-                ],
-              ),
+            // Apply Personal Yield button - aligned with Edit button width
+            Row(
+              children: [
+                Expanded(
+                  child: StyledButton(
+                    backgroundColor: Colors.orange,
+                    onPressed: () => _showPersonalYieldDialog(_selectedUser!),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.percent_rounded, color: Colors.white, size: 16),
+                        const SizedBox(width: 6),
+                        PrimaryTextW('Apply Personal Yield', fontSize: 14),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(), // Spacer to match Edit button width
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             
