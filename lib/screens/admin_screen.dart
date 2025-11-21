@@ -3362,14 +3362,41 @@ class _AdminScreenState extends State<AdminScreen> {
 
     try {
       final supabase = Supabase.instance.client;
-      await supabase
-          .from('profiles')
-          .update({
+      
+      // Check if email changed - if so, use Edge Function to update auth email (bypasses verification)
+      final emailChanged = email.trim().toLowerCase() != user.email.toLowerCase();
+      
+      if (emailChanged) {
+        // Use Edge Function to update email in both auth and profiles (bypasses email verification)
+        final response = await supabase.functions.invoke(
+          'update-user-email',
+          body: {
+            'user_id': user.uid,
+            'email': email.trim().toLowerCase(),
             'first_name': firstName.trim(),
             'last_name': lastName.trim(),
-            'email': email.trim(),
-          })
-          .eq('id', user.uid);
+          },
+        );
+
+        // Check for errors in response
+        if (response.data != null && response.data['error'] != null) {
+          throw Exception(response.data['error']);
+        }
+        
+        // Verify success
+        if (response.data == null || response.data['ok'] != true) {
+          throw Exception('Email update did not complete successfully');
+        }
+      } else {
+        // Email didn't change, just update profile fields
+        await supabase
+            .from('profiles')
+            .update({
+              'first_name': firstName.trim(),
+              'last_name': lastName.trim(),
+            })
+            .eq('id', user.uid);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3386,7 +3413,7 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error updating user: $e'),
+            content: Text('Error updating user: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
